@@ -1,2 +1,2 @@
 # cpptensor
-Tensor library written in c++
+Tensor library written in c++ 26
