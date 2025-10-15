@@ -14,17 +14,21 @@ if(APPLE)
         set(BUILD_AVX2 OFF CACHE BOOL "" FORCE)
         set(BUILD_AVX512 OFF CACHE BOOL "" FORCE)
     endif()
+    if(BUILD_CUDA)
+        message(WARNING "NO CUDA ON MAC :/ . Forcing them OFF.")
+        set(BUILD_CUDA OFF CACHE BOOL "" FORCE)
+    endif ()
 endif()
 
 if(BUILD_CUDA)
-    project(cppgrad LANGUAGES CXX CUDA)
+    project(cpptensor LANGUAGES CXX CUDA)
     set(CMAKE_CXX_STANDARD 26)
     set(CMAKE_CUDA_STANDARD 17)
-    message(STATUS "Building cppgrad with build type: ${CMAKE_BUILD_TYPE}")
+    message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
 else()
-    project(cppgrad LANGUAGES CXX)
+    project(cpptensor LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 26)
-    message(STATUS "Building cppgrad with build type: ${CMAKE_BUILD_TYPE}")
+    message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
 if(BUILD_CUDA)
@@ -66,68 +70,68 @@ file(GLOB AVX512_SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/backend/isa/*avx5
 
 # ==== Create object libraries for ISA specializations ====
 if(BUILD_AVX2 AND AVX2_SRC)
-    add_library(cppgrad_isa_avx2 OBJECT ${AVX2_SRC})
+    add_library(cpptensor_isa_avx2 OBJECT ${AVX2_SRC})
     if(MSVC)
-        target_compile_options(cppgrad_isa_avx2 PRIVATE /arch:AVX2)
+        target_compile_options(cpptensor_isa_avx2 PRIVATE /arch:AVX2)
     elseif(NOT APPLE)
-        target_compile_options(cppgrad_isa_avx2 PRIVATE -mavx2 -mfma -O3)
+        target_compile_options(cpptensor_isa_avx2 PRIVATE -mavx2 -mfma -O3)
     else()
         message(STATUS "Skipping AVX2 flags on macOS (unsupported)")
     endif()
-    target_include_directories(cppgrad_isa_avx2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_include_directories(cpptensor_isa_avx2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 endif()
 
 if(BUILD_AVX512 AND AVX512_SRC)
-    add_library(cppgrad_isa_avx512 OBJECT ${AVX512_SRC})
+    add_library(cpptensor_isa_avx512 OBJECT ${AVX512_SRC})
     if(MSVC)
         # MSVC's AVX-512 support varies by version/toolset. Use with caution.
-        target_compile_options(cppgrad_isa_avx512 PRIVATE /arch:AVX512)
+        target_compile_options(cpptensor_isa_avx512 PRIVATE /arch:AVX512)
     elseif(NOT APPLE)
-        target_compile_options(cppgrad_isa_avx512 PRIVATE -mavx512f -mavx512dq -mavx512bw -mavx512vl -mfma -O3)
+        target_compile_options(cpptensor_isa_avx512 PRIVATE -mavx512f -mavx512dq -mavx512bw -mavx512vl -mfma -O3)
     else()
         message(STATUS "Skipping AVX-512 flags on macOS (unsupported)")
     endif()
-    target_include_directories(cppgrad_isa_avx512 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_include_directories(cpptensor_isa_avx512 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 endif()
 
 # ==== Create final static library, including object libs if present ====
-set(CPPGRAD_OBJ_SOURCES ${ALL_SRC})
+set(cpptensor_OBJ_SOURCES ${ALL_SRC})
 
 # Construct the add_library call with OBJECTS expanded if they exist
 if(BUILD_AVX2 AND AVX2_SRC)
-    list(APPEND CPPGRAD_OBJ_SOURCES $<TARGET_OBJECTS:cppgrad_isa_avx2>)
+    list(APPEND cpptensor_OBJ_SOURCES $<TARGET_OBJECTS:cpptensor_isa_avx2>)
 endif()
 if(BUILD_AVX512 AND AVX512_SRC)
-    list(APPEND CPPGRAD_OBJ_SOURCES $<TARGET_OBJECTS:cppgrad_isa_avx512>)
+    list(APPEND cpptensor_OBJ_SOURCES $<TARGET_OBJECTS:cpptensor_isa_avx512>)
 endif()
 
 # ==== Create Static Library ====
-add_library(cppgrad STATIC ${CPPGRAD_OBJ_SOURCES})
+add_library(cpptensor STATIC ${cpptensor_OBJ_SOURCES})
 
 # ==== Pass build options as compiler definitions ====
-target_compile_definitions(cppgrad PUBLIC
+target_compile_definitions(cpptensor PUBLIC
         $<$<BOOL:${BUILD_AVX2}>:BUILD_AVX2>
         $<$<BOOL:${BUILD_AVX512}>:BUILD_AVX512>
         $<$<BOOL:${BUILD_CUDA}>:BUILD_CUDA>
         #$<$<BOOL:${USE_STD_SIMD}>:USE_STD_SIMD>
 )
 
-set_target_properties(cppgrad PROPERTIES
+set_target_properties(cpptensor PROPERTIES
         POSITION_INDEPENDENT_CODE ON
 )
 
 # ==== Include Directories ====
-target_include_directories(cppgrad
-        PUBLIC  ${CMAKE_SOURCE_DIR}/include            # Enables: #include "cppgrad/tensor/..."
-        PRIVATE ${CMAKE_SOURCE_DIR}/include/cppgrad    # Enables: #include "tensor/..."
+target_include_directories(cpptensor
+        PUBLIC  ${CMAKE_SOURCE_DIR}/include            # Enables: #include "cpptensor/tensor/..."
+        PRIVATE ${CMAKE_SOURCE_DIR}/include/cpptensor    # Enables: #include "tensor/..."
 )
 
 ## ==== Link Cuda Backend ====
 if(BUILD_CUDA)
-    set_target_properties(cppgrad PROPERTIES
+    set_target_properties(cpptensor PROPERTIES
             CUDA_SEPARABLE_COMPILATION ON
     )
-    target_link_libraries(cppgrad PUBLIC CUDA::cudart)
+    target_link_libraries(cpptensor PUBLIC CUDA::cudart)
 endif()
 
 # ==== Enable Testing ====

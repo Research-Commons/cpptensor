@@ -1,13 +1,13 @@
-#include "cppgrad/ops/div.hpp"
-#include "cppgrad/autograd/function.hpp"
-#include "cppgrad/tensor/tensor.hpp"
+#include "cpptensor/ops/div.hpp"
+#include "cpptensor/autograd/function.hpp"
+#include "cpptensor/tensor/tensor.hpp"
 
 #include <stdexcept>
 
-#include "cppgrad/dispatcher/kernelRegistry.h"
-#include "cppgrad/ops/helperOps.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h"
+#include "cpptensor/ops/helperOps.hpp"
 
-namespace cppgrad {
+namespace cpptensor {
 
     Tensor operator/(const Tensor& a, const Tensor& b) {
         if (a.device_type() != a.device_type()) {

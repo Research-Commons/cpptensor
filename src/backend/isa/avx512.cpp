@@ -1,19 +1,19 @@
-#include "cppgrad/backend/isa/avx512.hpp"
+#include "cpptensor/backend/isa/avx512.hpp"
 #include <immintrin.h>
 #include <cstdint>
 #include <numeric>
 #include <stdexcept>
 
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h" // adjust include to your actual path
-#include "cppgrad/enums/dispatcherEnum.h"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h" // adjust include to your actual path
+#include "cpptensor/enums/dispatcherEnum.h"
 
-namespace cppgrad{
+namespace cpptensor{
 
-void add_f32_avx512(const cppgrad::Tensor& A,
-                    const cppgrad::Tensor& B,
-                    cppgrad::Tensor& Out) {
-    using namespace cppgrad;
+void add_f32_avx512(const cpptensor::Tensor& A,
+                    const cpptensor::Tensor& B,
+                    cpptensor::Tensor& Out) {
+    using namespace cpptensor;
 
     // Basic sanity checks
     if (A.device_type() != DeviceType::CPU ||
@@ -51,10 +51,10 @@ void add_f32_avx512(const cppgrad::Tensor& A,
     }
 }
 
-void mul_f32_avx512(const cppgrad::Tensor& A,
-                    const cppgrad::Tensor& B,
-                    cppgrad::Tensor& Out) {
-    using namespace cppgrad;
+void mul_f32_avx512(const cpptensor::Tensor& A,
+                    const cpptensor::Tensor& B,
+                    cpptensor::Tensor& Out) {
+    using namespace cpptensor;
 
     if (A.device_type() != DeviceType::CPU ||
         B.device_type() != DeviceType::CPU ||
@@ -96,7 +96,7 @@ void mul_f32_avx512(const cppgrad::Tensor& A,
 // registration (called once at startup)
 CPPGRAD_REGISTER_BACKEND(avx512, {
     std::cout << "[cppgrad] Registering AVX512 kernels...\n";
-    auto& R = cppgrad::KernelRegistry::instance();
-    R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cppgrad::add_f32_avx512);
-    R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cppgrad::mul_f32_avx512);
+    auto& R = cpptensor::KernelRegistry::instance();
+    R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cpptensor::add_f32_avx512);
+    R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::mul_f32_avx512);
 });

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cppgrad/tensor/tensor.hpp"
+#include "cpptensor/tensor/tensor.hpp"
 
-namespace cppgrad {
+namespace cpptensor {
 
     class CUDA {
     public:

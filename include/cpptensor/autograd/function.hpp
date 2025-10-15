@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-namespace cppgrad {
+namespace cpptensor {
 
     /**
      * @file function.hpp

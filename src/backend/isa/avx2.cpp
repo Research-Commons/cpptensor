@@ -1,13 +1,13 @@
 #include <immintrin.h>
-#include "cppgrad/backend/isa/avx2.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h"
-#include "cppgrad/enums/dispatcherEnum.h"
+#include "cpptensor/backend/isa/avx2.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h"
+#include "cpptensor/enums/dispatcherEnum.h"
 
-namespace cppgrad {
+namespace cpptensor {
 
-void add_f32_avx2(const cppgrad::Tensor& A,
-                  const cppgrad::Tensor& B,
-                  cppgrad::Tensor& Out) {
+void add_f32_avx2(const cpptensor::Tensor& A,
+                  const cpptensor::Tensor& B,
+                  cpptensor::Tensor& Out) {
     // Basic sanity checks
     if (A.device_type() != DeviceType::CPU ||
         B.device_type() != DeviceType::CPU ||
@@ -40,9 +40,9 @@ void add_f32_avx2(const cppgrad::Tensor& A,
     }
 }
 
-void mul_f32_avx2(const cppgrad::Tensor& A,
-                  const cppgrad::Tensor& B,
-                  cppgrad::Tensor& Out) {
+void mul_f32_avx2(const cpptensor::Tensor& A,
+                  const cpptensor::Tensor& B,
+                  cpptensor::Tensor& Out) {
     // Basic sanity checks
     if (A.device_type() != DeviceType::CPU ||
         B.device_type() != DeviceType::CPU ||
@@ -80,7 +80,7 @@ void mul_f32_avx2(const cppgrad::Tensor& A,
 
 CPPGRAD_REGISTER_BACKEND(avx2, {
     std::cout << "[cppgrad] Registering AVX2 kernels...\n";
-    auto& R = cppgrad::KernelRegistry::instance();
-    R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cppgrad::add_f32_avx2);
-    R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cppgrad::mul_f32_avx2);
+    auto& R = cpptensor::KernelRegistry::instance();
+    R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::add_f32_avx2);
+    R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::mul_f32_avx2);
 });

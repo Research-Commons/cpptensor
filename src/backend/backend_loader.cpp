@@ -1,14 +1,14 @@
-#include "cppgrad/backend/backend_loader.hpp"
+#include "cpptensor/backend/backend_loader.hpp"
 
 #include "backend/cpu_backend.h"
 #include "backend/cuda_backend.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h"
-#include "cppgrad/enums/dispatcherEnum.h"
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/backend/isa/avx2.hpp"
-#include "cppgrad/backend/isa/avx512.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h"
+#include "cpptensor/enums/dispatcherEnum.h"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/backend/isa/avx2.hpp"
+#include "cpptensor/backend/isa/avx512.hpp"
 
-namespace cppgrad {
+namespace cpptensor {
 
     void initialize_kernels() {
         auto& R = KernelRegistry::instance();
@@ -24,13 +24,13 @@ namespace cppgrad {
         R.registerBackwardKernel(OpType::Div, DeviceType::CPU, CPU::divBackwardKernel);
 
 #ifdef BUILD_AVX2
-        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cppgrad::add_f32_avx2);
-        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cppgrad::mul_f32_avx2);
+        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::add_f32_avx2);
+        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::mul_f32_avx2);
 #endif
 
 #ifdef BUILD_AVX512
-        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cppgrad::add_f32_avx512);
-        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cppgrad::mul_f32_avx512);
+        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cpptensor::add_f32_avx512);
+        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::mul_f32_avx512);
 #endif
 
 #ifdef BUILD_CUDA

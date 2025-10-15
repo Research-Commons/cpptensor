@@ -1,13 +1,13 @@
-#include "cppgrad/autograd/function.hpp"
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/utils/broadcastUtils.hpp"
+#include "cpptensor/autograd/function.hpp"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/utils/broadcastUtils.hpp"
 #include <stdexcept>
 #include <numeric>
 #include <limits>
 
-#include "cppgrad/dispatcher/kernelRegistry.h"
+#include "cpptensor/dispatcher/kernelRegistry.h"
 
-namespace cppgrad {
+namespace cpptensor {
 
 /*
  Helpers:

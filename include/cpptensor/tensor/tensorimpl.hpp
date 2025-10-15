@@ -3,9 +3,9 @@
 #include <memory>
 #include <stdexcept>
 
-#include "cppgrad/enums/dispatcherEnum.h"
+#include "cpptensor/enums/dispatcherEnum.h"
 
-namespace cppgrad {
+namespace cpptensor {
 
     class Function; // forward
 

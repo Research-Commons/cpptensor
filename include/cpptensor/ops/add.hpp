@@ -2,7 +2,7 @@
 #include <vector>
 #include <stdexcept>
 
-namespace cppgrad {
+namespace cpptensor {
 
     class Tensor;
 

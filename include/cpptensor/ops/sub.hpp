@@ -1,6 +1,6 @@
 #pragma once
 
-namespace cppgrad {
+namespace cpptensor {
     class Tensor;
 
     Tensor operator-(const Tensor& a, const Tensor& b);

@@ -4,9 +4,9 @@
 #include <stdexcept>
 #include <utility>
 
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/enums/dispatcherEnum.h"
-#include "cppgrad/backend/isa/isaDetect.hpp"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/enums/dispatcherEnum.h"
+#include "cpptensor/backend/isa/isaDetect.hpp"
 
 // This macro ensures two things:
 // 1. Kernel registration code runs automatically at startup.
@@ -18,7 +18,7 @@ return true;                                                 \
 }();                                                             \
 extern "C" void cppgrad_force_link_##NAME() {}
 
-namespace cppgrad {
+namespace cpptensor {
 
 class KernelRegistry {
 public:

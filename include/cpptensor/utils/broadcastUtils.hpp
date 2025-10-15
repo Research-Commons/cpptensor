@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <stdexcept>
 
-namespace cppgrad {
+namespace cpptensor {
 
     /**
      * Pad a shape on the left with 1s to length n.

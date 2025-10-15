@@ -1,8 +1,8 @@
-#include "cppgrad/tensor/tensorimpl.hpp"
+#include "cpptensor/tensor/tensorimpl.hpp"
 #include <numeric>
 #include <stdexcept>
 
-namespace cppgrad {
+namespace cpptensor {
 
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            const std::vector<float>& data,

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "cppgrad/enums/dispatcherEnum.h"
+#include "cpptensor/enums/dispatcherEnum.h"
 
 #include <string>
 
-namespace cppgrad {
+namespace cpptensor {
 #if defined(_MSC_VER)
 #include <immintrin.h>
 #include <intrin.h>

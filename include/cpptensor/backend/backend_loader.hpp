@@ -1,5 +1,5 @@
 #pragma once
 
-namespace cppgrad {
+namespace cpptensor {
     void initialize_kernels();
 }

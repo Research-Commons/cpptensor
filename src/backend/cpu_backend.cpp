@@ -1,11 +1,11 @@
-#include "cppgrad/backend/cpu_backend.h"
-#include "cppgrad/utils/broadcastUtils.hpp"
+#include "cpptensor/backend/cpu_backend.h"
+#include "cpptensor/utils/broadcastUtils.hpp"
 #include <limits>
 #include <experimental/simd>
 
 //Need to fix these ( reduce so much repetitions. dont care that much rn as its just basic C++ kernels not even being called mostly)
 
-void cppgrad::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+void cpptensor::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     const auto& a_sh = A.shape();
     const auto& b_sh = B.shape();
     const auto& out_sh = out.shape();
@@ -45,7 +45,7 @@ void cppgrad::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     }
 }
 
-void cppgrad::CPU::mulKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+void cpptensor::CPU::mulKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     const auto& a_sh = A.shape();
     const auto& b_sh = B.shape();
     const auto& out_sh = out.shape();
@@ -82,7 +82,7 @@ void cppgrad::CPU::mulKernel(const Tensor &A, const Tensor &B, Tensor &out) {
 }
 
 
-void cppgrad::CPU::subKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+void cpptensor::CPU::subKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     const auto& a_sh = A.shape();
     const auto& b_sh = B.shape();
     const auto& out_sh = out.shape();
@@ -122,7 +122,7 @@ void cppgrad::CPU::subKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     }
 }
 
-void cppgrad::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     const auto& a_sh = A.shape();
     const auto& b_sh = B.shape();
     const auto& out_sh = out.shape();
@@ -167,7 +167,7 @@ void cppgrad::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     }
 }
 
-void cppgrad::CPU::addBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out, Tensor &grad_a, Tensor &grad_b) {
+void cpptensor::CPU::addBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out, Tensor &grad_a, Tensor &grad_b) {
     auto a_sh = A.shape();
     auto b_sh = B.shape();
     auto out_sh = compute_broadcast_shape(a_sh, b_sh);
@@ -209,7 +209,7 @@ void cppgrad::CPU::addBackwardKernel(const Tensor &A, const Tensor &B, const Ten
     grad_b.data() = std::move(b_squeezed);
 }
 
-void cppgrad::CPU::mulBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
+void cpptensor::CPU::mulBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
                                     Tensor &grad_a, Tensor &grad_b) {
     auto a_sh = A.shape();
     auto b_sh = B.shape();
@@ -253,7 +253,7 @@ void cppgrad::CPU::mulBackwardKernel(const Tensor &A, const Tensor &B, const Ten
     grad_b.data() = std::move(b_squeezed);
 }
 
-void cppgrad::CPU::subBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
+void cpptensor::CPU::subBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
                                      Tensor &grad_a, Tensor &grad_b) {
     auto a_sh = A.shape();
     auto b_sh = B.shape();
@@ -296,7 +296,7 @@ void cppgrad::CPU::subBackwardKernel(const Tensor &A, const Tensor &B, const Ten
     grad_b.data() = std::move(b_squeezed);
 }
 
-void cppgrad::CPU::divBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
+void cpptensor::CPU::divBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
                                      Tensor &grad_a, Tensor &grad_b) {
     auto a_sh = A.shape();
     auto b_sh = B.shape();

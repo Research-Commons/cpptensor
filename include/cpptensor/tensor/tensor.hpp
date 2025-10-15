@@ -6,10 +6,10 @@
 #include <string>
 #include <sstream>
 
-#include "cppgrad/tensor/tensorimpl.hpp"
-#include "cppgrad/enums/dispatcherEnum.h"   // for DeviceType
+#include "cpptensor/tensor/tensorimpl.hpp"
+#include "cpptensor/enums/dispatcherEnum.h"   // for DeviceType
 
-namespace cppgrad {
+namespace cpptensor {
 
 /**
  * Public-facing Tensor class.

@@ -1,5 +1,5 @@
-#include "cppgrad/backend/cuda_backend.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h" // adjust include path for KernelRegistry/OpType/DeviceType
+#include "cpptensor/backend/cuda_backend.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h" // adjust include path for KernelRegistry/OpType/DeviceType
 #include <vector>
 #include <iostream>
 #include <stdexcept>
@@ -61,7 +61,7 @@ void mul_kernel_broadcast(const float* a, const float* b, float* out,
 }
 
 
-namespace cppgrad {
+namespace cpptensor {
 
     void CUDA::addKernel(const Tensor& A, const Tensor& B, Tensor& out) {
         // Prepare shapes and strides (same logic as CPU)

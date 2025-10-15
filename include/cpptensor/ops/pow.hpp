@@ -1,6 +1,6 @@
 #pragma once
 
-namespace cppgrad {
+namespace cpptensor {
      class Tensor;
 
      Tensor pow(const Tensor& base, const Tensor& exponent);

@@ -1,10 +1,10 @@
 #include <cuda_runtime_api.h>
 #include <benchmark/benchmark.h>
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/backend/cuda_backend.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/backend/cuda_backend.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h"
 
-using namespace cppgrad;
+using namespace cpptensor;
 
 static void BM_Add_CUDA(benchmark::State& state) {
     KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CUDA, CUDA::addKernel);

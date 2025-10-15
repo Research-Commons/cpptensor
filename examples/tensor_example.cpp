@@ -436,11 +436,11 @@
 //     return 0;
 // }
 
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/autograd/function.hpp"
-#include "cppgrad/backend/backend_loader.hpp"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/autograd/function.hpp"
+#include "cpptensor/backend/backend_loader.hpp"
 
-using namespace cppgrad;
+using namespace cpptensor;
 
 int main() {
 

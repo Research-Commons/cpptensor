@@ -1,9 +1,9 @@
 #include <benchmark/benchmark.h>
-#include "cppgrad/tensor/tensor.hpp"
-#include "cppgrad/dispatcher/kernelRegistry.h"
-#include "cppgrad/backend/cpu_backend.h"
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/dispatcher/kernelRegistry.h"
+#include "cpptensor/backend/cpu_backend.h"
 
-using namespace cppgrad;
+using namespace cpptensor;
 
 static void BM_Add_CPU(benchmark::State& state) {
     KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CPU, CPU::addKernel);

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cppgrad/tensor/tensor.hpp"
+#include "cpptensor/tensor/tensor.hpp"
 
-namespace cppgrad {
+namespace cpptensor {
     class CPU {
     public:
         static void addKernel(const Tensor& A, const Tensor& B, Tensor& out);

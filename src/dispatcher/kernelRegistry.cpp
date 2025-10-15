@@ -1,1 +1,1 @@
-#include "cppgrad/dispatcher/kernelRegistry.h"
+#include "cpptensor/dispatcher/kernelRegistry.h"

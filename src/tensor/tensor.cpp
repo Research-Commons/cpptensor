@@ -1,4 +1,4 @@
-#include "cppgrad/tensor/tensor.hpp"
+#include "cpptensor/tensor/tensor.hpp"
 
 #include <random>
 #include <algorithm>
@@ -6,9 +6,9 @@
 #include <cmath>
 #include <iostream>
 
-#include "cppgrad/autograd/function.hpp"
+#include "cpptensor/autograd/function.hpp"
 
-namespace cppgrad {
+namespace cpptensor {
 
 // ---------- Constructors ----------
 Tensor::Tensor(const std::vector<size_t>& shape,
