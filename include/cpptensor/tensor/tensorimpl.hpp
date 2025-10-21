@@ -42,8 +42,8 @@ namespace cpptensor {
         std::vector<float>& grad();
         const std::vector<float>& grad() const;
 
-        const std::vector<float>& stride() const;
-        std::vector<float>& stride();
+        const std::vector<size_t>& stride() const;
+        std::vector<size_t>& stride();
 
         std::shared_ptr<Function>& grad_fn();
         const std::shared_ptr<Function>& grad_fn() const;
@@ -61,7 +61,7 @@ namespace cpptensor {
     private:
         std::vector<float> data_;
         std::vector<float> grad_; // empty until needed
-        std::vector<float> stride_; // empty until needed
+        std::vector<size_t> stride_; // empty until needed
         std::shared_ptr<Function> grad_fn_;
         bool requires_grad_ = false;
         bool has_called_backward_ = false;

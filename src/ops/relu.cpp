@@ -1,14 +1,13 @@
-#include "ops/exp.hpp"
-#include "autograd/function.hpp"
+#include "ops/relu.hpp"
 #include "dispatcher/kernelRegistry.h"
 #include "tensor/tensor.hpp"
 
 namespace cpptensor {
 
-    Tensor exp(const Tensor& a) {
+    Tensor relu(const Tensor& a) {
         Tensor out = Tensor::full(a.shape(), 0.f , a.requires_grad());
 
-        KernelRegistry::instance().getUnaryKernel(OpType::Exp, a.device_type())(a, out);
+        KernelRegistry::instance().getUnaryKernel(OpType::Relu, a.device_type())(a, out);
 
         return out;
     }

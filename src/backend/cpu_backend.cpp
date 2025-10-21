@@ -167,6 +167,227 @@ void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     }
 }
 
+void cpptensor::CPU::expKernel(const Tensor& A, Tensor& Out) {
+    // ==== Sanity checks ====
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("exp_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("exp_f32_generic: shape mismatch");
+    }
+
+    // ==== Get raw data pointers ====
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    // ==== Elementwise exponential ====
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = std::exp(in_data[i]);
+    }
+}
+
+void cpptensor::CPU::logKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("log_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("log_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        float val = in_data[i];
+        if (val <= 0.0f) {
+            out_data[i] = -INFINITY;
+        } else {
+            out_data[i] = std::log(val);
+        }
+    }
+}
+
+void cpptensor::CPU::powKernel(const Tensor& A, const Tensor& B, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU ||
+        B.device_type() != DeviceType::CPU ||
+        Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("pow_f32_generic: only CPU tensors supported");
+        }
+
+    if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+        throw std::runtime_error("pow_f32_generic: shape mismatch");
+    }
+
+    const float* a_data = A.data().data();
+    const float* b_data = B.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        float base = a_data[i];
+        float exp  = b_data[i];
+
+        if (base < 0.0f) {
+            // NaN for non-integer powers of negative numbers
+            out_data[i] = std::numeric_limits<float>::quiet_NaN();
+        } else {
+            out_data[i] = std::pow(base, exp);
+        }
+    }
+}
+
+void cpptensor::CPU::absKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("abs_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("abs_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = std::fabs(in_data[i]);
+    }
+}
+
+void cpptensor::CPU::sqrtKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("sqrt_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("sqrt_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        float val = in_data[i];
+        if (val < 0.0f) {
+            out_data[i] = std::numeric_limits<float>::quiet_NaN(); // domain error
+        } else {
+            out_data[i] = std::sqrt(val);
+        }
+    }
+}
+
+void cpptensor::CPU::sinKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("sin_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("sin_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = std::sin(in_data[i]);
+    }
+}
+
+void cpptensor::CPU::cosKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("cos_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("cos_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = std::cos(in_data[i]);
+    }
+}
+
+void cpptensor::CPU::tanKernel(const Tensor& A, Tensor& Out) {
+    // ==== Sanity checks ====
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("tan_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("tan_f32_generic: shape mismatch");
+    }
+
+    // ==== Get raw data ====
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    // ==== Elementwise tangent ====
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = std::tan(in_data[i]);
+    }
+}
+
+void cpptensor::CPU::sigmoidKernel(const Tensor& A, Tensor& Out) {
+    // ==== Sanity checks ====
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("sigmoid_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("sigmoid_f32_generic: shape mismatch");
+    }
+
+    // ==== Get raw pointers ====
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    // ==== Forward pass: numerically stable sigmoid ====
+    for (std::int64_t i = 0; i < n; ++i) {
+        float x = in_data[i];
+        if (x >= 0.0f) {
+            float exp_neg_x = std::exp(-x);
+            out_data[i] = 1.0f / (1.0f + exp_neg_x);
+        } else {
+            float exp_x = std::exp(x);
+            out_data[i] = exp_x / (1.0f + exp_x);
+        }
+    }
+}
+
+void cpptensor::CPU::reluKernel(const Tensor& A, Tensor& Out) {
+    // ==== Sanity checks ====
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("relu_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("relu_f32_generic: shape mismatch");
+    }
+
+    // ==== Get raw data pointers ====
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    // ==== Compute ReLU elementwise ====
+    for (std::int64_t i = 0; i < n; ++i) {
+        float x = in_data[i];
+        out_data[i] = (x > 0.0f) ? x : 0.0f;
+    }
+}
+
 void cpptensor::CPU::addBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out, Tensor &grad_a, Tensor &grad_b) {
     auto a_sh = A.shape();
     auto b_sh = B.shape();
@@ -350,4 +571,6 @@ void cpptensor::CPU::divBackwardKernel(const Tensor &A, const Tensor &B, const T
     grad_a.data() = std::move(a_squeezed);
     grad_b.data() = std::move(b_squeezed);
 }
+
+
 

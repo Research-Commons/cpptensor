@@ -25,15 +25,6 @@ public:
            bool requires_grad = false,
            DeviceType device = DeviceType::CPU);
 
-    // Construct scalar or filled tensor
-    Tensor(const std::vector<size_t>& shape,
-           float value,
-           bool requires_grad = false,
-           DeviceType device = DeviceType::CPU);
-
-    // Internal constructor (from impl)
-    explicit Tensor(std::shared_ptr<TensorImpl> impl);
-
     Tensor() = default;
     Tensor(const Tensor&) = default;
     Tensor(Tensor&&) noexcept = default;
@@ -76,11 +67,8 @@ public:
     const std::vector<float>& data() const;
     std::vector<float>& data();
 
-    const std::vector<float>& stride() const;
-    std::vector<float>& stride();
-
-    std::vector<size_t> stride_sizet() const;
-    std::vector<size_t> stride_sizet();
+    const std::vector<size_t>& stride() const;
+    std::vector<size_t>& stride();
 
     std::shared_ptr<TensorImpl> impl() const;
 
@@ -105,6 +93,13 @@ public:
     friend Tensor operator/(float, const Tensor&);
 
     friend Tensor operator-(const Tensor&);  // unary minus
+
+protected:
+    // Construct scalar or filled tensor
+    Tensor(const std::vector<size_t>& shape,
+           float value,
+           bool requires_grad = false,
+           DeviceType device = DeviceType::CPU);
 
 private:
     std::shared_ptr<TensorImpl> impl_;

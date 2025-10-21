@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 # ==== Options ====
 # Build AVX objects (compile-time flags). Turn off if compiler can't support or you want smaller binary.
-option(BUILD_AVX2  "Build AVX2 optimized kernels (object library)"  OFF)
-option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" OFF)
-option(BUILD_CUDA "Use CUDA kernels" OFF)
+option(BUILD_AVX2  "Build AVX2 optimized kernels (object library)"  ON)
+option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" ON)
+option(BUILD_CUDA "Use CUDA kernels" ON)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 
 #Failsafe for mac users
@@ -30,6 +30,9 @@ else()
     set(CMAKE_CXX_STANDARD 26)
     message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
 endif()
+
+# Enable debug info and frame pointers (needed for accurate profiling)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g -fno-omit-frame-pointer")
 
 if(BUILD_CUDA)
     find_package(CUDAToolkit REQUIRED)

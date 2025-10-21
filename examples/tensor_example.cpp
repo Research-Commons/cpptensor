@@ -436,15 +436,29 @@
 //     return 0;
 // }
 
+#include <cmath>
+
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/autograd/function.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
+#include "cpptensor/ops/cos.hpp"
+#include "cpptensor/ops/exp.hpp"
+#include "cpptensor/ops/log.hpp"
+#include "cpptensor/ops/pow.hpp"
+#include "cpptensor/ops/relu.hpp"
+#include "cpptensor/ops/sigmoid.hpp"
+#include "cpptensor/ops/sin.hpp"
+#include "cpptensor/ops/sqrt.hpp"
+//#include <gperftools/profiler.h>
 
 using namespace cpptensor;
 
 int main() {
 
+    //ProfilerStart("profile.out");
+
     initialize_kernels();
+
 
     // KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CPU, CPU::addKernel);
     // KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CPU, CPU::mulKernel);
@@ -464,13 +478,17 @@ int main() {
     // KernelRegistry::instance().registerBackwardKernel(OpType::Sub, DeviceType::CPU, CPU::subBackwardKernel);
     // KernelRegistry::instance().registerBackwardKernel(OpType::Div, DeviceType::CPU, CPU::divBackwardKernel);
 
-    Tensor A({2,3}, std::vector<float>{1,2,3, 4,5,6}, true, DeviceType::CUDA);
-    Tensor B({2,3}, std::vector<float>{6,5,4, 3,2,1}, true, DeviceType::CUDA);
+    Tensor A({2,3}, std::vector<float>{1,2,3, 4,5,6}, true, DeviceType::CPU);
+    Tensor B({2,3}, std::vector<float>{6,5,4, 3,2,1}, true, DeviceType::CPU);
 
     Tensor Z = A + B;
     Tensor X = Z * B;
     Tensor Y = X - A;
     Tensor W = Y / A;
+
+    Tensor C = cpptensor::pow(A,B);
+
+    C.print();
 
 
     W.backward();
@@ -488,6 +506,33 @@ int main() {
     X.print_grad();
     Y.print_grad();
     W.print_grad();
+
+    // Tensor A({2,3}, std::vector<float>{-2.0f, -0.5f, 0.0f, 1.5f, 3.0f, 5.0f}, true, DeviceType::CPU);
+    // Tensor C = cpptensor::relu(A);
+    // C.print();
+
+    //PROFILING
+    // Run a bunch of tensor computations in a loop
+    // Tensor finalW;
+    // for (int i = 0; i < 100000; ++i) {
+    //     Tensor A({2,3}, std::vector<float>{1,2,3,4,5,6}, true, DeviceType::CPU);
+    //     Tensor B({2,3}, std::vector<float>{6,5,4,3,2,1}, true, DeviceType::CPU);
+    //
+    //     Tensor Z = A + B;
+    //     Tensor X = Z * B;
+    //     Tensor Y = X - A;
+    //     Tensor W = Y / A;
+    //
+    //     W.backward();
+    //
+    //     // keep the result so compiler doesn’t optimize everything away
+    //     finalW = W;
+    // }
+
+    //negation done
+
+
+   // ProfilerStop();
 
     return 0;
 }

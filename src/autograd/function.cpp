@@ -121,8 +121,8 @@ void AddFunction::apply(const std::vector<float>& grad_output) {
     auto out_sh = compute_broadcast_shape(a_impl->shape(), b_impl->shape());
 
     Tensor grad_out_tensor(out_sh, grad_output, false, dev);
-    Tensor grad_a_tensor(a_impl->shape(), 0.0f, false, dev);
-    Tensor grad_b_tensor(b_impl->shape(), 0.0f, false, dev);
+    Tensor grad_a_tensor = Tensor::full(a_impl->shape(), 0.0f, false, dev);
+    Tensor grad_b_tensor = Tensor::full(b_impl->shape(), 0.0f, false, dev);
 
     auto bk = KernelRegistry::instance().getBackwardKernel(OpType::Add, dev);
     if (!bk) throw std::runtime_error("No backward kernel registered for Add (device or CPU)");
@@ -166,8 +166,8 @@ void MulFunction::apply(const std::vector<float>& grad_output) {
     auto out_sh = compute_broadcast_shape(a_impl->shape(), b_impl->shape());
 
     Tensor grad_out_tensor(out_sh, grad_output, false, dev);
-    Tensor grad_a_tensor(a_impl->shape(), 0.0f, false, dev);
-    Tensor grad_b_tensor(b_impl->shape(), 0.0f, false, dev);
+    Tensor grad_a_tensor = Tensor::full(a_impl->shape(), 0.0f, false, dev);
+    Tensor grad_b_tensor = Tensor::full(b_impl->shape(), 0.0f, false, dev);
 
     auto bk = KernelRegistry::instance().getBackwardKernel(OpType::Mul, dev);
     if (!bk) throw std::runtime_error("No backward kernel registered for Mul (device or CPU)");
@@ -209,8 +209,8 @@ void SubFunction::apply(const std::vector<float>& grad_output) {
     auto out_sh = compute_broadcast_shape(a_impl->shape(), b_impl->shape());
 
     Tensor grad_out_tensor(out_sh, grad_output, false, dev);
-    Tensor grad_a_tensor(a_impl->shape(), 0.0f, false, dev);
-    Tensor grad_b_tensor(b_impl->shape(), 0.0f, false, dev);
+    Tensor grad_a_tensor = Tensor::full(a_impl->shape(), 0.0f, false, dev);
+    Tensor grad_b_tensor = Tensor::full(b_impl->shape(), 0.0f, false, dev);
 
     auto bk = KernelRegistry::instance().getBackwardKernel(OpType::Sub, dev);
     if (!bk) throw std::runtime_error("No backward kernel registered for Sub (device or CPU)");
@@ -252,8 +252,8 @@ void DivFunction::apply(const std::vector<float>& grad_output) {
     auto out_sh = compute_broadcast_shape(a_impl->shape(), b_impl->shape());
 
     Tensor grad_out_tensor(out_sh, grad_output, false, dev);
-    Tensor grad_a_tensor(a_impl->shape(), 0.0f, false, dev);
-    Tensor grad_b_tensor(b_impl->shape(), 0.0f, false, dev);
+    Tensor grad_a_tensor = Tensor::full(a_impl->shape(), 0.0f, false, dev);
+    Tensor grad_b_tensor = Tensor::full(b_impl->shape(), 0.0f, false, dev);
 
     auto bk = KernelRegistry::instance().getBackwardKernel(OpType::Div, dev);
     if (!bk) throw std::runtime_error("No backward kernel registered for Div (device or CPU)");

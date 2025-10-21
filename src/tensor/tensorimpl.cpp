@@ -19,9 +19,10 @@ namespace cpptensor {
         if (data_.size() != total) {
             throw std::runtime_error("TensorImpl: data size does not match shape");
         }
-        compute_strides(shape);
+        stride_ = compute_strides(shape_);
     }
 
+    //protected const
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            float fill_value,
                            bool requires_grad,
@@ -35,14 +36,14 @@ namespace cpptensor {
         size_t total = 1;
         for (auto s : shape_) total *= s;
         data_.assign(total, fill_value);
-        compute_strides(shape);
+        stride_ = compute_strides(shape_);
     }
 
     const std::vector<float>& TensorImpl::data() const { return data_; }
     std::vector<float>& TensorImpl::data() { return data_; }
 
     bool TensorImpl::requires_grad() const { return requires_grad_; }
-    bool TensorImpl::has_autograd() const { return (bool)grad_fn_; }
+    bool TensorImpl::has_autograd() const { return static_cast<bool>(grad_fn_); }
 
     std::vector<float>& TensorImpl::grad() {
         if (grad_.empty()) grad_.assign(numel(), 0.0f);
@@ -52,8 +53,8 @@ namespace cpptensor {
         return grad_;
     }
 
-    std::vector<float>& TensorImpl::stride(){ return stride_; }
-    const std::vector<float>& TensorImpl::stride() const { return stride_; }
+    std::vector<size_t>& TensorImpl::stride(){ return stride_; }
+    const std::vector<size_t>& TensorImpl::stride() const { return stride_; }
 
     std::shared_ptr<Function>& TensorImpl::grad_fn() { return grad_fn_; }
     const std::shared_ptr<Function>& TensorImpl::grad_fn() const { return grad_fn_; }

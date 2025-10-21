@@ -25,10 +25,6 @@ Tensor::Tensor(const std::vector<size_t>& shape,
     : impl_(std::make_shared<TensorImpl>(shape, value, requires_grad, device))
 {}
 
-Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
-    : impl_(std::move(impl))
-{}
-
 // ---------- Factories ----------
 Tensor Tensor::zeros(const std::vector<size_t>& shape,
                      bool requires_grad,
@@ -169,28 +165,8 @@ const std::vector<float>& Tensor::grad() const {
 // Data access
 const std::vector<float>& Tensor::data() const { return impl_->data(); }
 std::vector<float>& Tensor::data() { return impl_->data(); }
-const std::vector<float>& Tensor::stride() const { return impl_->stride(); }
-std::vector<float>& Tensor::stride(){ return impl_->stride(); }
-
-std::vector<size_t> Tensor::stride_sizet() const {
-    const auto &s = stride(); // returns std::vector<float> (your storage)
-    std::vector<size_t> stride_s;
-    stride_s.reserve(s.size());
-    for (size_t i = 0; i < s.size(); ++i) {
-        stride_s.push_back(static_cast<size_t>(s[i]));
-    }
-    return stride_s; // returned by value — safe
-}
-
-std::vector<size_t> Tensor::stride_sizet() {
-    const auto &s = stride();
-    std::vector<size_t> stride_s;
-    stride_s.reserve(s.size());
-    for (size_t i = 0; i < s.size(); ++i) {
-        stride_s.push_back(static_cast<size_t>(s[i]));
-    }
-    return stride_s; // safe
-}
+const std::vector<size_t>& Tensor::stride() const { return impl_->stride(); }
+std::vector<size_t>& Tensor::stride(){ return impl_->stride(); }
 
 
 std::shared_ptr<TensorImpl> Tensor::impl() const { return impl_; }
