@@ -22,31 +22,19 @@ namespace cpptensor {
         // device defaults to DeviceType::CPU for backward compatibility
         TensorImpl(const std::vector<size_t>& shape,
                    const std::vector<float>& data,
-                   bool requires_grad,
                    DeviceType device = DeviceType::CPU);
 
         // Construct from shape and a single fill value
         TensorImpl(const std::vector<size_t>& shape,
                    float fill_value,
-                   bool requires_grad,
                    DeviceType device = DeviceType::CPU);
 
         // Accessors
         const std::vector<float>& data() const;
         std::vector<float>& data();
 
-        bool requires_grad() const;
-        bool has_autograd() const;
-
-        // Gradient access (will create grad storage lazily)
-        std::vector<float>& grad();
-        const std::vector<float>& grad() const;
-
         const std::vector<size_t>& stride() const;
         std::vector<size_t>& stride();
-
-        std::shared_ptr<Function>& grad_fn();
-        const std::shared_ptr<Function>& grad_fn() const;
 
         bool has_called_backward() const;
         void set_has_called_backward(bool val);
@@ -60,11 +48,8 @@ namespace cpptensor {
 
     private:
         std::vector<float> data_;
-        std::vector<float> grad_; // empty until needed
-        std::vector<size_t> stride_; // empty until needed
+        std::vector<size_t> stride_;
         std::shared_ptr<Function> grad_fn_;
-        bool requires_grad_ = false;
-        bool has_called_backward_ = false;
         std::vector<size_t> shape_;
         DeviceType device_ = DeviceType::CPU;
 

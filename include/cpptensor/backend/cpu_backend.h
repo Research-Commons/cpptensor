@@ -19,15 +19,5 @@ namespace cpptensor {
         static void tanKernel(const Tensor& A, Tensor& Out);
         static void sigmoidKernel(const Tensor& A, Tensor& Out);
         static void reluKernel(const Tensor& A, Tensor& Out);
-
-
-        static void addBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
-                                    Tensor &grad_a, Tensor &grad_b);
-        static void mulBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
-                                    Tensor &grad_a, Tensor &grad_b);
-        static void subBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
-                                     Tensor &grad_a, Tensor &grad_b);
-        static void divBackwardKernel(const Tensor &A, const Tensor &B, const Tensor &grad_out,
-                                     Tensor &grad_a, Tensor &grad_b);
     };
 }

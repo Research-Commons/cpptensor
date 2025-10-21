@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 # Build AVX objects (compile-time flags). Turn off if compiler can't support or you want smaller binary.
 option(BUILD_AVX2  "Build AVX2 optimized kernels (object library)"  ON)
 option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" ON)
-option(BUILD_CUDA "Use CUDA kernels" ON)
+option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 
 #Failsafe for mac users

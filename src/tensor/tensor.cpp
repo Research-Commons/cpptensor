@@ -6,47 +6,39 @@
 #include <cmath>
 #include <iostream>
 
-#include "cpptensor/autograd/function.hpp"
-
 namespace cpptensor {
 
 // ---------- Constructors ----------
 Tensor::Tensor(const std::vector<size_t>& shape,
                const std::vector<float>& values,
-               bool requires_grad,
                DeviceType device)
-    : impl_(std::make_shared<TensorImpl>(shape, values, requires_grad, device))
+    : impl_(std::make_shared<TensorImpl>(shape, values, device))
 {}
 
 Tensor::Tensor(const std::vector<size_t>& shape,
                float value,
-               bool requires_grad,
                DeviceType device)
-    : impl_(std::make_shared<TensorImpl>(shape, value, requires_grad, device))
+    : impl_(std::make_shared<TensorImpl>(shape, value, device))
 {}
 
 // ---------- Factories ----------
 Tensor Tensor::zeros(const std::vector<size_t>& shape,
-                     bool requires_grad,
                      DeviceType device) {
-    return Tensor(shape, 0.0f, requires_grad, device);
+    return Tensor(shape, 0.0f, device);
 }
 
 Tensor Tensor::ones(const std::vector<size_t>& shape,
-                    bool requires_grad,
                     DeviceType device) {
-    return Tensor(shape, 1.0f, requires_grad, device);
+    return Tensor(shape, 1.0f, device);
 }
 
 Tensor Tensor::full(const std::vector<size_t>& shape,
                     float value,
-                    bool requires_grad,
                     DeviceType device) {
-    return Tensor(shape, value, requires_grad, device);
+    return Tensor(shape, value, device);
 }
 
 Tensor Tensor::randn(const std::vector<size_t>& shape,
-                     bool requires_grad,
                      DeviceType device) {
     size_t total = 1;
     for (auto s : shape) total *= s;
@@ -54,21 +46,15 @@ Tensor Tensor::randn(const std::vector<size_t>& shape,
     static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
     std::normal_distribution<float> d(0.0f, 1.0f);
     for (size_t i = 0; i < total; ++i) data[i] = d(gen);
-    return Tensor(shape, data, requires_grad, device);
+    return Tensor(shape, data, device);
 }
 
 // ---------- Shape & Info ----------
 std::vector<size_t> Tensor::shape() const { return impl_->shape(); }
 size_t Tensor::numel() const { return impl_->numel(); }
 size_t Tensor::ndim() const { return impl_->shape().size(); }
-bool Tensor::requires_grad() const { return impl_->requires_grad(); }
 DeviceType Tensor::device_type() const { return impl_->device(); }
 
-
-void Tensor::zero_grad() {
-    auto &g = impl_->grad();
-    std::fill(g.begin(), g.end(), 0.0f);
-}
 
 void Tensor::print() const {
     const auto &s = impl_->shape();
@@ -112,63 +98,11 @@ void Tensor::print_pretty() const {
     }
 }
 
-void Tensor::print_grad() const {
-    if (!impl_->requires_grad()) {
-        std::cout << "No grad (requires_grad == false)\n";
-        return;
-    }
-    if (impl_->grad().empty()) {
-        std::cout << "grad: (empty)\n";
-        return;
-    }
-    const auto &g = impl_->grad();
-    std::cout << "grad=[";
-    for (size_t i = 0; i < g.size(); ++i) {
-        if (i) std::cout << ", ";
-        std::cout << g[i];
-        if (i >= 31) { std::cout << ", ..."; break; }
-    }
-    std::cout << "]\n";
-}
-
-// -------- Minimal autograd support --------
-void Tensor::backward(const std::vector<float>& grad_output) {
-    if (!impl_->requires_grad()) {
-        throw std::runtime_error("Tensor::backward: tensor does not require grad");
-    }
-
-    size_t n = numel();
-    if (!grad_output.empty()) {
-        if (grad_output.size() != n)
-            throw std::runtime_error("Tensor::backward: grad_output size does not match tensor");
-        impl_->grad() = grad_output; // copy
-    } else {
-        // default: if scalar -> grad 1.0, else ones
-        impl_->grad().assign(n, 1.0f);
-    }
-
-    impl_->set_has_called_backward(true);
-
-    // Hook for a real autograd graph traversal:
-    if (impl_->has_autograd() && impl_->grad_fn()) {
-        // TODO: Call grad_fn->apply(...) / traverse graph
-        // For now, just a stub to show where autograd would run.
-        // e.g., impl_->grad_fn()->backward(impl_->grad());
-        impl_->grad_fn()->apply(impl_->grad());
-    }
-}
-
-const std::vector<float>& Tensor::grad() const {
-    return impl_->grad();
-}
-
 // Data access
 const std::vector<float>& Tensor::data() const { return impl_->data(); }
 std::vector<float>& Tensor::data() { return impl_->data(); }
 const std::vector<size_t>& Tensor::stride() const { return impl_->stride(); }
 std::vector<size_t>& Tensor::stride(){ return impl_->stride(); }
-
-
 std::shared_ptr<TensorImpl> Tensor::impl() const { return impl_; }
 
 } // namespace cppgrad

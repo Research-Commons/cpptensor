@@ -29,11 +29,6 @@ namespace cpptensor {
         R.registerUnaryKernel(OpType::Sigmoid, DeviceType::CPU, CPU::sigmoidKernel);
         R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CPU::reluKernel);
 
-        R.registerBackwardKernel(OpType::Add, DeviceType::CPU, CPU::addBackwardKernel);
-        R.registerBackwardKernel(OpType::Mul, DeviceType::CPU, CPU::mulBackwardKernel);
-        R.registerBackwardKernel(OpType::Sub, DeviceType::CPU, CPU::subBackwardKernel);
-        R.registerBackwardKernel(OpType::Div, DeviceType::CPU, CPU::divBackwardKernel);
-
 #ifdef BUILD_AVX2
         R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, add_f32_avx2);
         R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, mul_f32_avx2);

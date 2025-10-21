@@ -22,7 +22,6 @@ public:
     // Construct from shape + values (row-major)
     Tensor(const std::vector<size_t>& shape,
            const std::vector<float>& values,
-           bool requires_grad = false,
            DeviceType device = DeviceType::CPU);
 
     Tensor() = default;
@@ -33,35 +32,23 @@ public:
 
     // -------- Factory Methods --------
     static Tensor zeros(const std::vector<size_t>& shape,
-                        bool requires_grad = false,
                         DeviceType device = DeviceType::CPU);
     static Tensor ones(const std::vector<size_t>& shape,
-                       bool requires_grad = false,
                        DeviceType device = DeviceType::CPU);
     static Tensor randn(const std::vector<size_t>& shape,
-                        bool requires_grad = false,
                         DeviceType device = DeviceType::CPU);
     static Tensor full(const std::vector<size_t>& shape,
                        float value,
-                       bool requires_grad = false,
                        DeviceType device = DeviceType::CPU);
 
     // -------- Shape and Info --------
     std::vector<size_t> shape() const;
     size_t numel() const;
     size_t ndim() const;
-    bool requires_grad() const;
     DeviceType device_type() const;
 
-    void zero_grad();
     void print() const;
     void print_pretty() const;
-    void print_grad() const;
-
-    // -------- Autograd  --------
-    void backward(const std::vector<float>& grad_output = std::vector<float>());
-
-    const std::vector<float>& grad() const;
 
     // -------- Data Access --------
     const std::vector<float>& data() const;
@@ -98,7 +85,6 @@ protected:
     // Construct scalar or filled tensor
     Tensor(const std::vector<size_t>& shape,
            float value,
-           bool requires_grad = false,
            DeviceType device = DeviceType::CPU);
 
 private:

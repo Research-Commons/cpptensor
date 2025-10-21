@@ -8,8 +8,8 @@ using namespace cpptensor;
 
 static void BM_Add_CUDA(benchmark::State& state) {
     KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CUDA, CUDA::addKernel);
-    Tensor A = Tensor::full({2048, 2048}, 5.f, false, DeviceType::CUDA);
-    Tensor B = Tensor::full({2048, 2048}, 5.f, false, DeviceType::CUDA);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CUDA);
+    Tensor B = Tensor::full({2048, 2048}, 5.f, DeviceType::CUDA);
     for (auto _ : state) {
         Tensor C = A + B;
         benchmark::DoNotOptimize(C);
@@ -19,8 +19,8 @@ static void BM_Add_CUDA(benchmark::State& state) {
 
 static void BM_Mul_CUDA(benchmark::State& state) {
     KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CUDA, CUDA::mulKernel);
-    Tensor A = Tensor::full({2048, 2048}, 5.f, false, DeviceType::CUDA);
-    Tensor B = Tensor::full({2048, 2048}, 5.f, false, DeviceType::CUDA);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CUDA);
+    Tensor B = Tensor::full({2048, 2048}, 5.f, DeviceType::CUDA);
     for (auto _ : state) {
         Tensor C = A * B;
         benchmark::DoNotOptimize(C);

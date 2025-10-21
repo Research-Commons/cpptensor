@@ -439,100 +439,109 @@
 #include <cmath>
 
 #include "cpptensor/tensor/tensor.hpp"
-#include "cpptensor/autograd/function.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
-#include "cpptensor/ops/cos.hpp"
-#include "cpptensor/ops/exp.hpp"
-#include "cpptensor/ops/log.hpp"
-#include "cpptensor/ops/pow.hpp"
-#include "cpptensor/ops/relu.hpp"
-#include "cpptensor/ops/sigmoid.hpp"
-#include "cpptensor/ops/sin.hpp"
-#include "cpptensor/ops/sqrt.hpp"
+
+#include "cpptensor/ops/math/abs.hpp"
+#include "cpptensor/ops/activation/relu.hpp"
+#include "cpptensor/ops/activation/sigmoid.hpp"
+#include "cpptensor/ops/arithmetic/add.hpp"
+#include "cpptensor/ops/arithmetic/div.hpp"
+#include "cpptensor/ops/arithmetic/neg.hpp"
+#include "cpptensor/ops/arithmetic/mul.hpp"
+#include "cpptensor/ops/arithmetic/pow.hpp"
+#include "cpptensor/ops/arithmetic/sub.hpp"
+#include "cpptensor/ops/math/abs.hpp"
+#include "cpptensor/ops/math/cos.hpp"
+#include "cpptensor/ops/math/log.hpp"
+#include "cpptensor/ops/math/exp.hpp"
+#include "cpptensor/ops/math/sin.hpp"
+#include "cpptensor/ops/math/sqrt.hpp"
+#include "cpptensor/ops/math/tan.hpp"
+
 //#include <gperftools/profiler.h>
 
 using namespace cpptensor;
 
 int main() {
 
-    //ProfilerStart("profile.out");
-
     initialize_kernels();
 
+    //-----------------TESTING---------------------
 
-    // KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CPU, CPU::addKernel);
-    // KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CPU, CPU::mulKernel);
-    // KernelRegistry::instance().registerKernel(OpType::Sub, DeviceType::CPU, CPU::subKernel);
-    // KernelRegistry::instance().registerKernel(OpType::Div, DeviceType::CPU, CPU::divKernel);
+    Tensor A({2,3}, std::vector<float>{1,2,3,4,5,6}, DeviceType::CPU);
+    Tensor B({2,3}, std::vector<float>{6,5,4,3,2,1}, DeviceType::CPU);
 
-    // KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cppgrad::add_f32_avx2);
-    // KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cppgrad::add_f32_avx512);
-    // KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cppgrad::mul_f32_avx2);
-    // KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cppgrad::mul_f32_avx512);
+    // ====== Binary Operations ======
+    Tensor C1 = A + B;
+    Tensor C2 = A * B;
+    Tensor C3 = B - A;
+    Tensor C4 = B / A;
+    Tensor C5 = cpptensor::pow(A, B);      // A ^ B
 
-    // KernelRegistry::instance().registerKernel(OpType::Add, DeviceType::CUDA, CUDA::addKernel);
-    // KernelRegistry::instance().registerKernel(OpType::Mul, DeviceType::CUDA, CUDA::mulKernel);
+    // ====== Unary Operations ======
+    Tensor C7 = cpptensor::exp(A);         // e^A
+    Tensor C8 = cpptensor::log(A);         // log(A)
+    Tensor C9 = cpptensor::sqrt(A);        // sqrt(A)
+    Tensor C10 = cpptensor::abs(-A); // | -A |
+    Tensor C11 = cpptensor::sigmoid(A);    // 1 / (1 + exp(-A))
+    Tensor C12 = cpptensor::relu(A);       // max(0, A)
+    Tensor C13 = cpptensor::sin(A);        // sin(A)
+    Tensor C14 = cpptensor::cos(A);        // cos(A)
+    Tensor C15 = cpptensor::tan(A);        // tan(A)
 
-    // KernelRegistry::instance().registerBackwardKernel(OpType::Add, DeviceType::CPU, CPU::addBackwardKernel);
-    // KernelRegistry::instance().registerBackwardKernel(OpType::Mul, DeviceType::CPU, CPU::mulBackwardKernel);
-    // KernelRegistry::instance().registerBackwardKernel(OpType::Sub, DeviceType::CPU, CPU::subBackwardKernel);
-    // KernelRegistry::instance().registerBackwardKernel(OpType::Div, DeviceType::CPU, CPU::divBackwardKernel);
+    // ====== Print Results ======
+    std::cout << "\n===== Binary Ops =====" << std::endl;
+    std::cout << "Add (A + B): ";   C1.print();
+    std::cout << "Sub (A - B): ";   C2.print();
+    std::cout << "Mul (A * B): ";   C3.print();
+    std::cout << "Div (A / B): ";   C4.print();
+    std::cout << "Pow (A ^ B): ";   C5.print();
 
-    Tensor A({2,3}, std::vector<float>{1,2,3, 4,5,6}, true, DeviceType::CPU);
-    Tensor B({2,3}, std::vector<float>{6,5,4, 3,2,1}, true, DeviceType::CPU);
+    std::cout << "\n===== Unary Ops =====" << std::endl;
+    std::cout << "Exp (e^A): ";         C7.print();
+    std::cout << "Log (ln(A)): ";       C8.print();
+    std::cout << "Sqrt (√A): ";         C9.print();
+    std::cout << "Abs (|-A|): ";        C10.print();
+    std::cout << "Sigmoid (σ(A)): ";    C11.print();
+    std::cout << "ReLU (max(0,A)): ";   C12.print();
+    std::cout << "Sin (sin(A)): ";      C13.print();
+    std::cout << "Cos (cos(A)): ";      C14.print();
+    std::cout << "Tan (tan(A)): ";      C15.print();
 
-    Tensor Z = A + B;
-    Tensor X = Z * B;
-    Tensor Y = X - A;
-    Tensor W = Y / A;
+    //-----------------PROFILING---------------------
+    //Run a bunch of tensor computations in a loop
 
-    Tensor C = cpptensor::pow(A,B);
-
-    C.print();
-
-
-    W.backward();
-
-
-    A.print();
-    B.print();
-    Z.print();
-    X.print();
-    Y.print();
-    W.print();
-    A.print_grad();
-    B.print_grad();
-    Z.print_grad();
-    X.print_grad();
-    Y.print_grad();
-    W.print_grad();
-
-    // Tensor A({2,3}, std::vector<float>{-2.0f, -0.5f, 0.0f, 1.5f, 3.0f, 5.0f}, true, DeviceType::CPU);
-    // Tensor C = cpptensor::relu(A);
-    // C.print();
-
-    //PROFILING
-    // Run a bunch of tensor computations in a loop
+    // ProfilerStart("profile.out");
+    //
     // Tensor finalW;
     // for (int i = 0; i < 100000; ++i) {
-    //     Tensor A({2,3}, std::vector<float>{1,2,3,4,5,6}, true, DeviceType::CPU);
-    //     Tensor B({2,3}, std::vector<float>{6,5,4,3,2,1}, true, DeviceType::CPU);
+    //     Tensor A({2,3}, std::vector<float>{1,2,3,4,5,6}, DeviceType::CPU);
+    //     Tensor B({2,3}, std::vector<float>{6,5,4,3,2,1}, DeviceType::CPU);
     //
-    //     Tensor Z = A + B;
-    //     Tensor X = Z * B;
-    //     Tensor Y = X - A;
-    //     Tensor W = Y / A;
+    //     // ====== Binary Operations ======
+    //     Tensor C1 = A + B;
+    //     Tensor C2 = A * B;
+    //     Tensor C3 = B - A;
+    //     Tensor C4 = B / A;
+    //     Tensor C5 = cpptensor::pow(A, B);      // A ^ B
     //
-    //     W.backward();
+    //     // ====== Unary Operations ======
+    //     Tensor C7 = cpptensor::exp(A);         // e^A
+    //     Tensor C8 = cpptensor::log(A);         // log(A)
+    //     Tensor C9 = cpptensor::sqrt(A);        // sqrt(A)
+    //     Tensor C10 = cpptensor::abs(-A); // | -A |
+    //     Tensor C11 = cpptensor::sigmoid(A);    // 1 / (1 + exp(-A))
+    //     Tensor C12 = cpptensor::relu(A);       // max(0, A)
+    //     Tensor C13 = cpptensor::sin(A);        // sin(A)
+    //     Tensor C14 = cpptensor::cos(A);        // cos(A)
+    //     Tensor C15 = cpptensor::tan(A);        // tan(A)
     //
     //     // keep the result so compiler doesn’t optimize everything away
-    //     finalW = W;
+    //     finalW = C15;
     // }
-
-    //negation done
-
-
-   // ProfilerStop();
+    //
+    //
+    // ProfilerStop();
 
     return 0;
 }

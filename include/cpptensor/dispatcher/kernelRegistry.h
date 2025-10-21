@@ -22,15 +22,12 @@ extern "C" void cppgrad_force_link_##NAME() {}
 // 1. Write kernel code
 // 2. Register that kernel in backend_loader
 // 3. Make sure the ops calls that kernel
-
 namespace cpptensor {
 
 class KernelRegistry {
 public:
     using KernelFunc = std::function<void(const Tensor&, const Tensor&, Tensor&)>;
     using UnaryKernelFunc    = std::function<void(const Tensor&, Tensor&)>;
-    using BackwardKernelFunc = std::function<void(
-        const Tensor&, const Tensor&, const Tensor&, Tensor&, Tensor&)>;
 
     static KernelRegistry& instance() { static KernelRegistry inst; return inst; }
 
@@ -46,13 +43,6 @@ public:
     }
     void registerUnaryKernel(OpType op, DeviceType dev, UnaryKernelFunc fn) {
         registerUnaryKernel(op, dev, CpuIsa::GENERIC, std::move(fn));
-    }
-
-    void registerBackwardKernel(OpType op, DeviceType dev, CpuIsa isa, BackwardKernelFunc fn) {
-        backward_[{op, dev, isa}] = std::move(fn);
-    }
-    void registerBackwardKernel(OpType op, DeviceType dev, BackwardKernelFunc fn) {
-        registerBackwardKernel(op, dev, CpuIsa::GENERIC, std::move(fn));
     }
 
     // Try exact (op,dev,best_isa) then degrade to AVX2 then GENERIC
@@ -88,26 +78,10 @@ public:
         throw std::runtime_error("No unary kernel registered for this op/device");
     }
 
-    BackwardKernelFunc getBackwardKernel(OpType op, DeviceType dev) {
-        if (dev == DeviceType::CPU) {
-            auto best = detect_best_cpu_isa();
-            for (CpuIsa isa : {best, CpuIsa::AVX2, CpuIsa::GENERIC}) {
-                auto it = backward_.find({op, dev, isa});
-                if (it != backward_.end()) return it->second;
-            }
-        }
-        auto exact = backward_.find({op, dev, CpuIsa::GENERIC});
-        if (exact != backward_.end()) return exact->second;
-        auto cpu_fallback = backward_.find({op, DeviceType::CPU, CpuIsa::GENERIC});
-        if (cpu_fallback != backward_.end()) return cpu_fallback->second;
-        throw std::runtime_error("No backward kernel registered for this op/device");
-    }
-
 private:
     KernelRegistry() = default;
     std::map<DispatchKey, KernelFunc> forward_;
     std::map<DispatchKey, UnaryKernelFunc> unary_forward_;
-    std::map<DispatchKey, BackwardKernelFunc> backward_;
 };
 
 } // namespace cppgrad
