@@ -18,6 +18,7 @@ namespace cpptensor {
         R.registerKernel(OpType::Sub, DeviceType::CPU, CPU::subKernel);
         R.registerKernel(OpType::Div, DeviceType::CPU, CPU::divKernel);
         R.registerKernel(OpType::Pow, DeviceType::CPU, CPU::powKernel);
+        R.registerKernel(OpType::Matmul, DeviceType::CPU, CPU::gemmf32kernel);
 
         R.registerUnaryKernel(OpType::Exp, DeviceType::CPU, CPU::expKernel);
         R.registerUnaryKernel(OpType::Log, DeviceType::CPU, CPU::logKernel);
@@ -30,26 +31,28 @@ namespace cpptensor {
         R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CPU::reluKernel);
 
 #ifdef BUILD_AVX2
-        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, add_f32_avx2);
-        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, mul_f32_avx2);
-        R.registerKernel(OpType::Sub, DeviceType::CPU, CpuIsa::AVX2, sub_f32_avx2);
-        R.registerKernel(OpType::Div, DeviceType::CPU, CpuIsa::AVX2, div_f32_avx2);
-        R.registerKernel(OpType::Pow, DeviceType::CPU, CpuIsa::AVX2, pow_f32_avx2);
+        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::add_f32_avx2);
+        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mul_f32_avx2);
+        R.registerKernel(OpType::Sub, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sub_f32_avx2);
+        R.registerKernel(OpType::Div, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::div_f32_avx2);
+        R.registerKernel(OpType::Pow, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::pow_f32_avx2);
+        R.registerKernel(OpType::Matmul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::matmul_f32_avx2);
 
-        R.registerUnaryKernel(OpType::Exp, DeviceType::CPU, CpuIsa::AVX2,exp_f32_avx2);
-        R.registerUnaryKernel(OpType::Log, DeviceType::CPU, CpuIsa::AVX2,log_f32_avx2);
-        R.registerUnaryKernel(OpType::Abs, DeviceType::CPU, CpuIsa::AVX2,abs_f32_avx2);
-        R.registerUnaryKernel(OpType::Sqrt,DeviceType::CPU, CpuIsa::AVX2,sqrt_f32_avx2);
-        R.registerUnaryKernel(OpType::Sin, DeviceType::CPU, CpuIsa::AVX2,sin_f32_avx2);
-        R.registerUnaryKernel(OpType::Cos, DeviceType::CPU, CpuIsa::AVX2,cos_f32_avx2);
-        R.registerUnaryKernel(OpType::Tan, DeviceType::CPU, CpuIsa::AVX2,tan_f32_avx2);
-        R.registerUnaryKernel(OpType::Sigmoid, DeviceType::CPU, CpuIsa::AVX2,sigmoid_f32_avx2);
-        R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CpuIsa::AVX2,relu_f32_avx2);
+        R.registerUnaryKernel(OpType::Exp, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::exp_f32_avx2);
+        R.registerUnaryKernel(OpType::Log, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::log_f32_avx2);
+        R.registerUnaryKernel(OpType::Abs, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::abs_f32_avx2);
+        R.registerUnaryKernel(OpType::Sqrt,DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sqrt_f32_avx2);
+        R.registerUnaryKernel(OpType::Sin, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sin_f32_avx2);
+        R.registerUnaryKernel(OpType::Cos, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::cos_f32_avx2);
+        R.registerUnaryKernel(OpType::Tan, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::tan_f32_avx2);
+        R.registerUnaryKernel(OpType::Sigmoid, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sigmoid_f32_avx2);
+        R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::relu_f32_avx2);
 #endif
 
 #ifdef BUILD_AVX512
-        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cpptensor::add_f32_avx512);
-        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::mul_f32_avx512);
+        R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::add_f32_avx512);
+        R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::mul_f32_avx512);
+        R.registerKernel(OpType::Matmul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::gemm_f32_avx512);
 #endif
 
 #ifdef BUILD_CUDA

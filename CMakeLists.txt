@@ -6,6 +6,7 @@ option(BUILD_AVX2  "Build AVX2 optimized kernels (object library)"  ON)
 option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" ON)
 option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
+option(USE_OPENBLAS "Use OpenBLAS if found on this system" ON)
 
 #Failsafe for mac users
 if(APPLE)
@@ -49,6 +50,22 @@ message(STATUS "Adding Google Benchmark from third_party/googlebenchmark")
 set(BENCHMARK_ENABLE_TESTING OFF) # disable GB's own tests
 set(BENCHMARK_ENABLE_INSTALL OFF)
 add_subdirectory(third_party/googlebenchmark)
+
+# ==== Optional OpenBLAS Detection ====
+if(USE_OPENBLAS)
+    find_package(OpenBLAS QUIET)
+
+    if(OpenBLAS_FOUND)
+        message(STATUS "✅ Found OpenBLAS: ${OpenBLAS_LIBRARIES}")
+        message(STATUS "    Includes: ${OpenBLAS_INCLUDE_DIRS}")
+        set(HAVE_OPENBLAS TRUE)
+    else()
+        message(STATUS "⚠️ OpenBLAS not found. Building without BLAS support.")
+        set(HAVE_OPENBLAS FALSE)
+    endif()
+else()
+    set(HAVE_OPENBLAS FALSE)
+endif()
 
 # ==== Source Files ====
 file(GLOB_RECURSE ALL_CPP CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -111,11 +128,19 @@ endif()
 # ==== Create Static Library ====
 add_library(cpptensor STATIC ${cpptensor_OBJ_SOURCES})
 
+# ==== Link OpenBLAS ====
+if(HAVE_OPENBLAS)
+    target_include_directories(cpptensor PUBLIC ${OpenBLAS_INCLUDE_DIRS})
+    target_link_libraries(cpptensor PUBLIC ${OpenBLAS_LIBRARIES})
+    target_compile_definitions(cpptensor PUBLIC USE_OPENBLAS)
+endif()
+
 # ==== Pass build options as compiler definitions ====
 target_compile_definitions(cpptensor PUBLIC
         $<$<BOOL:${BUILD_AVX2}>:BUILD_AVX2>
         $<$<BOOL:${BUILD_AVX512}>:BUILD_AVX512>
         $<$<BOOL:${BUILD_CUDA}>:BUILD_CUDA>
+        $<$<BOOL:${USE_OPENBLAS}>:USE_OPENBLAS>
         #$<$<BOOL:${USE_STD_SIMD}>:USE_STD_SIMD>
 )
 

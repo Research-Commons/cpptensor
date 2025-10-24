@@ -2,13 +2,14 @@
 #include "cpptensor/backend/isa/avx2.hpp"
 
 #include <cmath>
+#include <cstring>
 
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
 
 namespace cpptensor {
 
-    void add_f32_avx2(const cpptensor::Tensor& A,
+    void AVX2::add_f32_avx2(const cpptensor::Tensor& A,
                       const cpptensor::Tensor& B,
                       cpptensor::Tensor& Out) {
         // Basic sanity checks
@@ -43,7 +44,7 @@ namespace cpptensor {
         }
     }
 
-    void mul_f32_avx2(const cpptensor::Tensor& A,
+    void AVX2::mul_f32_avx2(const cpptensor::Tensor& A,
                       const cpptensor::Tensor& B,
                       cpptensor::Tensor& Out) {
         // Basic sanity checks
@@ -78,7 +79,7 @@ namespace cpptensor {
         }
     }
 
-    void sub_f32_avx2(const Tensor& A,
+    void AVX2::sub_f32_avx2(const Tensor& A,
                   const Tensor& B,
                   Tensor& Out) {
 
@@ -113,7 +114,7 @@ namespace cpptensor {
         }
     }
 
-    void div_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+    void AVX2::div_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU ||
         B.device_type() != DeviceType::CPU ||
         Out.device_type() != DeviceType::CPU) {
@@ -191,7 +192,7 @@ namespace cpptensor {
         return _mm256_mul_ps(y, pow2n);
     }
 
-    void exp_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::exp_f32_avx2(const Tensor& A, Tensor& Out) {
         // Basic sanity checks (mirror your add kernel style)
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 exp: only CPU tensors supported");
@@ -277,7 +278,7 @@ namespace cpptensor {
         return result;
     }
 
-    void log_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::log_f32_avx2(const Tensor& A, Tensor& Out) {
         // Basic sanity checks
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 log: only CPU tensors supported");
@@ -309,7 +310,7 @@ namespace cpptensor {
     //////////////////////////////////////////
 
     //----------POW--------------
-    void pow_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+    void AVX2::pow_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU ||
             B.device_type() != DeviceType::CPU ||
             Out.device_type() != DeviceType::CPU) {
@@ -351,7 +352,7 @@ namespace cpptensor {
     }
 
     // ------ABS---------
-    void abs_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::abs_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 abs: only CPU tensors supported");
         }
@@ -380,7 +381,7 @@ namespace cpptensor {
     }
 
     //-----------SQRT----------------
-    void sqrt_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::sqrt_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 sqrt: only CPU tensors supported");
         }
@@ -442,7 +443,7 @@ namespace cpptensor {
         return result;
     }
 
-    void sin_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::sin_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 sin: only CPU tensors supported");
         }
@@ -495,7 +496,7 @@ namespace cpptensor {
         return result;
     }
 
-    void cos_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::cos_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 cos: only CPU tensors supported");
         }
@@ -524,7 +525,7 @@ namespace cpptensor {
     }
 
     //---------TAN-------------
-    void tan_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::tan_f32_avx2(const Tensor& A, Tensor& Out) {
         // ==== Sanity checks ====
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 tan: only CPU tensors supported");
@@ -568,7 +569,7 @@ namespace cpptensor {
     }
 
     //---------SIGMOID-------------
-    void sigmoid_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::sigmoid_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 sigmoid: only CPU tensors supported");
         }
@@ -608,7 +609,7 @@ namespace cpptensor {
     }
 
     //---------RELU-------------
-    void relu_f32_avx2(const Tensor& A, Tensor& Out) {
+    void AVX2::relu_f32_avx2(const Tensor& A, Tensor& Out) {
         if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
             throw std::runtime_error("AVX2 relu: only CPU tensors supported");
         }
@@ -639,14 +640,85 @@ namespace cpptensor {
         }
     }
 
+void AVX2::matmul_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
+    // --- Sanity checks ---
+    if (A.device_type() != DeviceType::CPU ||
+        B.device_type() != DeviceType::CPU ||
+        C.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("AVX2 matmul: only CPU tensors supported");
+    }
+
+    if (A.shape().size() != 2 || B.shape().size() != 2 || C.shape().size() != 2) {
+        throw std::runtime_error("AVX2 matmul: only supports 2D tensors");
+    }
+
+    const int M = static_cast<int>(A.shape()[0]);
+    const int K = static_cast<int>(A.shape()[1]);
+    const int KB = static_cast<int>(B.shape()[0]);
+    const int N = static_cast<int>(B.shape()[1]);
+
+    if (K != KB)
+        throw std::runtime_error("AVX2 matmul: dimension mismatch (A.cols != B.rows)");
+    if (C.shape()[0] != M || C.shape()[1] != N)
+        throw std::runtime_error("AVX2 matmul: output shape mismatch");
+
+    const float* Adata = A.data().data();
+    const float* Bdata = B.data().data();
+    float* Cdata = C.data().data();
+
+    // zero the output (row-major)
+    std::memset(Cdata, 0, sizeof(float) * size_t(M) * N);
+
+    constexpr int BLOCK = 8;      // vector width
+    constexpr int BLOCK_X = 4;    // number of 8-wide accumulators per tile
+    constexpr int BLOCK_Y = 4;    // number of rows per tile
+
+    // We'll use Bfm as a pointer reinterpret to __m256* view of B (column-packed)
+    // For simplicity we treat B row-major directly, loading as needed.
+
+    for (int y = 0; y < M; y += BLOCK_Y) {
+        for (int x = 0; x < N; x += BLOCK * BLOCK_X) {
+
+            __m256 acc[BLOCK_Y][BLOCK_X];
+            for (int iy = 0; iy < BLOCK_Y; ++iy)
+                for (int ix = 0; ix < BLOCK_X; ++ix)
+                    acc[iy][ix] = _mm256_setzero_ps();
+
+            // Main K loop
+            for (int k = 0; k < K; ++k) {
+                for (int iy = 0; iy < BLOCK_Y && (y + iy) < M; ++iy) {
+                    __m256 ta = _mm256_broadcast_ss(&Adata[(y + iy) * K + k]);
+
+                    for (int ix = 0; ix < BLOCK_X; ++ix) {
+                        int xoff = x + ix * BLOCK;
+                        if (xoff >= N) break;
+
+                        // safe load of B[k, xoff : xoff+8]
+                        alignas(32) float btmp[BLOCK] = {0};
+                        int remain = std::min(BLOCK, N - xoff);
+                        std::memcpy(btmp, &Bdata[k * N + xoff], remain * sizeof(float));
+                        __m256 bv = _mm256_loadu_ps(btmp);
+
+                        acc[iy][ix] = _mm256_fmadd_ps(ta, bv, acc[iy][ix]);
+                    }
+                }
+            }
+
+            // store accumulators
+            for (int iy = 0; iy < BLOCK_Y && (y + iy) < M; ++iy) {
+                for (int ix = 0; ix < BLOCK_X; ++ix) {
+                    int xoff = x + ix * BLOCK;
+                    if (xoff >= N) break;
+
+                    alignas(32) float ctmp[BLOCK];
+                    _mm256_storeu_ps(ctmp, acc[iy][ix]);
+
+                    int remain = std::min(BLOCK, N - xoff);
+                    std::memcpy(&Cdata[(y + iy) * N + xoff], ctmp, remain * sizeof(float));
+                }
+            }
+        }
+    }
+}
 } // namespace cppgrad
 
-
-CPPGRAD_REGISTER_BACKEND(avx2, {
-    std::cout << "[cppgrad] Registering AVX2 kernels...\n";
-    auto& R = cpptensor::KernelRegistry::instance();
-    R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::add_f32_avx2);
-    R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::mul_f32_avx2);
-    R.registerKernel(OpType::Sub, DeviceType::CPU, CpuIsa::AVX2, cpptensor::sub_f32_avx2);
-    R.registerKernel(OpType::Div, DeviceType::CPU, CpuIsa::AVX2, cpptensor::div_f32_avx2);
-});

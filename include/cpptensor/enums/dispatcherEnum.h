@@ -1,7 +1,7 @@
 #pragma once
 
 enum class DeviceType { CPU , CUDA};
-enum class OpType    { Add, Mul , Sub, Div, Pow, Exp, Log, Abs, Sqrt, Sin, Cos, Tan, Sigmoid, Relu};
+enum class OpType    { Add, Mul , Sub, Div, Pow, Exp, Log, Abs, Sqrt, Sin, Cos, Tan, Sigmoid, Relu, Matmul};
 
 //CPU instruction-set tiers
 enum class CpuIsa { GENERIC, AVX2, AVX512 };

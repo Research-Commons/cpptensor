@@ -1,22 +1,25 @@
 #pragma once
-#include <vector>
 #include "cpptensor/tensor/tensor.hpp"
 
 namespace cpptensor {
-    void add_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
-    void mul_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
-    void sub_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
-    void div_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
-    void pow_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
-    void exp_f32_avx2(const Tensor& A, Tensor& Out);
-    void log_f32_avx2(const Tensor& A, Tensor& Out);
-    void abs_f32_avx2(const Tensor& A, Tensor& Out);
-    void sqrt_f32_avx2(const Tensor& A, Tensor& Out);
-    void sin_f32_avx2(const Tensor& A, Tensor& Out);
-    void cos_f32_avx2(const Tensor& A, Tensor& Out);
-    void tan_f32_avx2(const Tensor& A, Tensor& Out);
-    void sigmoid_f32_avx2(const Tensor& A, Tensor& Out);
-    void relu_f32_avx2(const Tensor& A, Tensor& Out);
+    class AVX2 {
+        public:
+            static void add_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void mul_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void sub_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void div_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void pow_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void exp_f32_avx2(const Tensor& A, Tensor& Out);
+            static void log_f32_avx2(const Tensor& A, Tensor& Out);
+            static void abs_f32_avx2(const Tensor& A, Tensor& Out);
+            static void sqrt_f32_avx2(const Tensor& A, Tensor& Out);
+            static void sin_f32_avx2(const Tensor& A, Tensor& Out);
+            static void cos_f32_avx2(const Tensor& A, Tensor& Out);
+            static void tan_f32_avx2(const Tensor& A, Tensor& Out);
+            static void sigmoid_f32_avx2(const Tensor& A, Tensor& Out);
+            static void relu_f32_avx2(const Tensor& A, Tensor& Out);
+            static void matmul_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C);
+    };
 } // namespace cppgrad
 
 

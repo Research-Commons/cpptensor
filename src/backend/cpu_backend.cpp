@@ -388,5 +388,74 @@ void cpptensor::CPU::reluKernel(const Tensor& A, Tensor& Out) {
     }
 }
 
+void cpptensor::CPU::gemmf32kernel(const Tensor &A, const Tensor &B, Tensor &Out) {
+
+    //-----this is way too slow. not gonna work. commenting----
+    // const int64_t M = A.shape()[0];
+    // const int64_t K = A.shape()[1];
+    // const int64_t KB = B.shape()[0];
+    // const int64_t N = B.shape()[1];
+    //
+    // if (K != KB || Out.shape()[0] != M || Out.shape()[1] != N) {
+    //     throw std::runtime_error("CPU Matmul: shape mismatch (A: MxK, B: KxN, C: MxN)");
+    // }
+    //
+    // const float* a = A.data().data();
+    // const float* b = B.data().data();
+    // float* c = Out.data().data();
+    //
+    // for (int64_t i = 0; i < M; ++i) {
+    //     for (int64_t j = 0; j < N; ++j) {
+    //         float sum = 0.0f;
+    //         for (int64_t k = 0; k < K; ++k) {
+    //             sum += a[i * K + k] * b[k * N + j];
+    //         }
+    //         c[i * N + j] = sum;
+    //     }
+    // }
+
+    //-----much faster cache friendly version with tiling and accumulator(fma)----
+
+    const int64_t M = A.shape()[0];
+    const int64_t K = A.shape()[1];
+    const int64_t KB = B.shape()[0];
+    const int64_t N = B.shape()[1];
+
+    if (K != KB || Out.shape()[0] != M || Out.shape()[1] != N) {
+        throw std::runtime_error("CPU GEMM: shape mismatch (A: MxK, B: KxN, C: MxN)");
+    }
+
+    const float* a = A.data().data();
+    const float* b = B.data().data();
+    float* c = Out.data().data();
+
+    constexpr int TILE_M = 32;
+    constexpr int TILE_N = 32;
+    constexpr int TILE_K = 32;
+
+    std::fill(c, c + M * N, 0.0f);
+
+    for (int64_t i0 = 0; i0 < M; i0 += TILE_M) {
+        for (int64_t j0 = 0; j0 < N; j0 += TILE_N) {
+            for (int64_t k0 = 0; k0 < K; k0 += TILE_K) {
+
+                int64_t iMax = std::min<int64_t>(M, i0 + TILE_M);
+                int64_t jMax = std::min<int64_t>(N, j0 + TILE_N);
+                int64_t kMax = std::min<int64_t>(K, k0 + TILE_K);
+
+                for (int64_t i = i0; i < iMax; ++i) {
+                    for (int64_t k = k0; k < kMax; ++k) {
+                        float a_ik = a[i * K + k];
+                        for (int64_t j = j0; j < jMax; ++j) {
+                            c[i * N + j] += a_ik * b[k * N + j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 
 

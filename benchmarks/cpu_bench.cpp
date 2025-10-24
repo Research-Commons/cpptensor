@@ -15,6 +15,7 @@
 #include "cpptensor/ops/math/cos.hpp"
 #include "cpptensor/ops/math/log.hpp"
 #include "cpptensor/ops/math/exp.hpp"
+#include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/ops/math/sin.hpp"
 #include "cpptensor/ops/math/sqrt.hpp"
 #include "cpptensor/ops/math/tan.hpp"
@@ -138,6 +139,16 @@ static void BM_Relu_CPU(benchmark::State& state) {
     }
 }
 
+static void BM_Matmul_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerKernel(OpType::Matmul, DeviceType::CPU, CPU::gemmf32kernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    Tensor B = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::matmul(A, B);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 BENCHMARK(BM_Add_CPU);
 BENCHMARK(BM_Mul_CPU);
 BENCHMARK(BM_Exp_CPU);
@@ -150,4 +161,5 @@ BENCHMARK(BM_Cos_CPU);
 BENCHMARK(BM_Tan_CPU);
 BENCHMARK(BM_Sigmoid_CPU);
 BENCHMARK(BM_Relu_CPU);
+BENCHMARK(BM_Matmul_CPU);
 BENCHMARK_MAIN();
