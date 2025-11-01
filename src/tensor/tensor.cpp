@@ -8,102 +8,102 @@
 
 namespace cpptensor {
 
-// ---------- Constructors ----------
-Tensor::Tensor(const std::vector<size_t>& shape,
-               const std::vector<float>& values,
-               DeviceType device)
-    : impl_(std::make_shared<TensorImpl>(shape, values, device))
-{}
+    // ---------- Constructors ----------
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<float>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
 
-Tensor::Tensor(const std::vector<size_t>& shape,
-               float value,
-               DeviceType device)
-    : impl_(std::make_shared<TensorImpl>(shape, value, device))
-{}
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   float value,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, value, device))
+    {}
 
-// ---------- Factories ----------
-Tensor Tensor::zeros(const std::vector<size_t>& shape,
-                     DeviceType device) {
-    return Tensor(shape, 0.0f, device);
-}
-
-Tensor Tensor::ones(const std::vector<size_t>& shape,
-                    DeviceType device) {
-    return Tensor(shape, 1.0f, device);
-}
-
-Tensor Tensor::full(const std::vector<size_t>& shape,
-                    float value,
-                    DeviceType device) {
-    return Tensor(shape, value, device);
-}
-
-Tensor Tensor::randn(const std::vector<size_t>& shape,
-                     DeviceType device) {
-    size_t total = 1;
-    for (auto s : shape) total *= s;
-    std::vector<float> data(total);
-    static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
-    std::normal_distribution<float> d(0.0f, 1.0f);
-    for (size_t i = 0; i < total; ++i) data[i] = d(gen);
-    return Tensor(shape, data, device);
-}
-
-// ---------- Shape & Info ----------
-std::vector<size_t> Tensor::shape() const { return impl_->shape(); }
-size_t Tensor::numel() const { return impl_->numel(); }
-size_t Tensor::ndim() const { return impl_->shape().size(); }
-DeviceType Tensor::device_type() const { return impl_->device(); }
-
-
-void Tensor::print() const {
-    const auto &s = impl_->shape();
-    std::cout << "Tensor(shape=[";
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (i) std::cout << ", ";
-        std::cout << s[i];
+    // ---------- Factories ----------
+    Tensor Tensor::zeros(const std::vector<size_t>& shape,
+                         DeviceType device) {
+        return Tensor(shape, 0.0f, device);
     }
-    std::cout << "], values=[";
-    const auto &d = impl_->data();
-    for (size_t i = 0; i < d.size(); ++i) {
-        if (i) std::cout << ", ";
-        std::cout << d[i];
-        if (i >= 31) { std::cout << ", ..."; break; }
-    }
-    std::cout << "])\n";
-}
 
-void Tensor::print_pretty() const {
-    // small pretty printer: only for 1D or 2D tensors
-    const auto s = impl_->shape();
-    const auto &d = impl_->data();
-    if (s.size() == 1) {
-        std::cout << "[";
-        for (size_t i = 0; i < s[0]; ++i) {
+    Tensor Tensor::ones(const std::vector<size_t>& shape,
+                        DeviceType device) {
+        return Tensor(shape, 1.0f, device);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        float value,
+                        DeviceType device) {
+        return Tensor(shape, value, device);
+    }
+
+    Tensor Tensor::randn(const std::vector<size_t>& shape,
+                         DeviceType device) {
+        size_t total = 1;
+        for (auto s : shape) total *= s;
+        std::vector<float> data(total);
+        static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
+        std::normal_distribution<float> d(0.0f, 1.0f);
+        for (size_t i = 0; i < total; ++i) data[i] = d(gen);
+        return Tensor(shape, data, device);
+    }
+
+    // ---------- Shape & Info ----------
+    std::vector<size_t> Tensor::shape() const { return impl_->shape(); }
+    size_t Tensor::numel() const { return impl_->numel(); }
+    size_t Tensor::ndim() const { return impl_->shape().size(); }
+    DeviceType Tensor::device_type() const { return impl_->device(); }
+
+
+    void Tensor::print() const {
+        const auto &s = impl_->shape();
+        std::cout << "Tensor(shape=[";
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (i) std::cout << ", ";
+            std::cout << s[i];
+        }
+        std::cout << "], values=[";
+        const auto &d = impl_->data();
+        for (size_t i = 0; i < d.size(); ++i) {
             if (i) std::cout << ", ";
             std::cout << d[i];
+            if (i >= 31) { std::cout << ", ..."; break; }
         }
-        std::cout << "]\n";
-    } else if (s.size() == 2) {
-        for (size_t r = 0; r < s[0]; ++r) {
+        std::cout << "])\n";
+    }
+
+    void Tensor::print_pretty() const {
+        // small pretty printer: only for 1D or 2D tensors
+        const auto s = impl_->shape();
+        const auto &d = impl_->data();
+        if (s.size() == 1) {
             std::cout << "[";
-            for (size_t c = 0; c < s[1]; ++c) {
-                if (c) std::cout << ", ";
-                std::cout << d[r * s[1] + c];
+            for (size_t i = 0; i < s[0]; ++i) {
+                if (i) std::cout << ", ";
+                std::cout << d[i];
             }
             std::cout << "]\n";
+        } else if (s.size() == 2) {
+            for (size_t r = 0; r < s[0]; ++r) {
+                std::cout << "[";
+                for (size_t c = 0; c < s[1]; ++c) {
+                    if (c) std::cout << ", ";
+                    std::cout << d[r * s[1] + c];
+                }
+                std::cout << "]\n";
+            }
+        } else {
+            print();
         }
-    } else {
-        print();
     }
-}
 
-// Data access
-const std::vector<float>& Tensor::data() const { return impl_->data(); }
-std::vector<float>& Tensor::data() { return impl_->data(); }
-const std::vector<size_t>& Tensor::stride() const { return impl_->stride(); }
-std::vector<size_t>& Tensor::stride(){ return impl_->stride(); }
-std::shared_ptr<TensorImpl> Tensor::impl() const { return impl_; }
+    // Data access
+    const std::vector<float>& Tensor::data() const { return impl_->data(); }
+    std::vector<float>& Tensor::data() { return impl_->data(); }
+    const std::vector<size_t>& Tensor::stride() const { return impl_->stride(); }
+    std::vector<size_t>& Tensor::stride(){ return impl_->stride(); }
+    std::shared_ptr<TensorImpl> Tensor::impl() const { return impl_; }
 
 } // namespace cppgrad
 

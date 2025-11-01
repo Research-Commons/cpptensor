@@ -2,6 +2,7 @@
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/backend/isa/avx512.hpp"
+#include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
 
 using namespace cpptensor;
@@ -36,7 +37,18 @@ static void BM_Matmul_AVX512(benchmark::State& state) {
     }
 }
 
+static void BM_Dot_AVX512(benchmark::State& state) {
+    KernelRegistry::instance().registerKernel(OpType::Dot, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::dot_f32_avx512);
+    Tensor A = Tensor::full({1048576}, 1.0f, DeviceType::CPU);  // 1M elements
+    Tensor B = Tensor::full({1048576}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::dot(A, B);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 BENCHMARK(BM_Add_AVX512);
 BENCHMARK(BM_Mul_AVX512);
 BENCHMARK(BM_Matmul_AVX512);
+BENCHMARK(BM_Dot_AVX512);
 BENCHMARK_MAIN();

@@ -11,6 +11,7 @@
 #include "cpptensor/ops/arithmetic/mul.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/arithmetic/sub.hpp"
+#include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/math/cos.hpp"
 #include "cpptensor/ops/math/log.hpp"
@@ -161,11 +162,21 @@ static void BM_Relu_AVX2(benchmark::State& state) {
 }
 
 static void BM_Matmul_AVX2(benchmark::State& state) {
-    KernelRegistry::instance().registerKernel(OpType::Matmul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::matmul_f32_avx2);
+    KernelRegistry::instance().registerKernel(OpType::Matmul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::gemm_f32_avx2);
     Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
     Tensor B = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
     for (auto _ : state) {
         Tensor C = cpptensor::matmul(A, B);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Dot_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerKernel(OpType::Dot, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::dot_f32_avx2);
+    Tensor A = Tensor::full({1048576}, 1.0f, DeviceType::CPU);  // 1M elements
+    Tensor B = Tensor::full({1048576}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::dot(A, B);
         benchmark::DoNotOptimize(C);
     }
 }
@@ -183,5 +194,6 @@ BENCHMARK(BM_Tan_AVX2);
 BENCHMARK(BM_Sigmoid_AVX2);
 BENCHMARK(BM_Relu_AVX2);
 BENCHMARK(BM_Matmul_AVX2);
+BENCHMARK(BM_Dot_AVX2);
 
 BENCHMARK_MAIN();

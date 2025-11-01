@@ -18,7 +18,8 @@ namespace cpptensor {
             static void tan_f32_avx2(const Tensor& A, Tensor& Out);
             static void sigmoid_f32_avx2(const Tensor& A, Tensor& Out);
             static void relu_f32_avx2(const Tensor& A, Tensor& Out);
-            static void matmul_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C);
+            static void gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C);
+            static void dot_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
     };
 } // namespace cppgrad
 

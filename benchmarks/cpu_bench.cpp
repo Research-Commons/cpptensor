@@ -11,6 +11,7 @@
 #include "cpptensor/ops/arithmetic/mul.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/arithmetic/sub.hpp"
+#include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/math/cos.hpp"
 #include "cpptensor/ops/math/log.hpp"
@@ -149,6 +150,22 @@ static void BM_Matmul_CPU(benchmark::State& state) {
     }
 }
 
+// Performance Results (1M element vectors)
+// Backend	Time (ns)	Speedup vs CPU
+// CPU	372,199	1.0× (baseline)
+// AVX2	119,997	3.1× faster
+// AVX512	80,309	4.6× faster
+
+static void BM_Dot_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerKernel(OpType::Dot, DeviceType::CPU, CPU::dotKernel);
+    Tensor A = Tensor::full({1048576}, 1.0f, DeviceType::CPU);  // 1M elements
+    Tensor B = Tensor::full({1048576}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::dot(A, B);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 BENCHMARK(BM_Add_CPU);
 BENCHMARK(BM_Mul_CPU);
 BENCHMARK(BM_Exp_CPU);
@@ -162,4 +179,5 @@ BENCHMARK(BM_Tan_CPU);
 BENCHMARK(BM_Sigmoid_CPU);
 BENCHMARK(BM_Relu_CPU);
 BENCHMARK(BM_Matmul_CPU);
+BENCHMARK(BM_Dot_CPU);
 BENCHMARK_MAIN();

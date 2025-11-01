@@ -5,5 +5,6 @@
 namespace cpptensor {
 
     Tensor matmul(const Tensor& A, const Tensor& B);
+    Tensor gemm(const Tensor& A, const Tensor& B);
 
 } // namespace cpptensor

@@ -456,6 +456,32 @@ void cpptensor::CPU::gemmf32kernel(const Tensor &A, const Tensor &B, Tensor &Out
     }
 }
 
+void cpptensor::CPU::dotKernel(const Tensor &A, const Tensor &B, Tensor &Out) {
+    const auto &a_sh = A.shape();
+    const auto &b_sh = B.shape();
+
+    if (a_sh.size() != 1 || b_sh.size() != 1) {
+        throw std::runtime_error("dotKernel: inputs must be 1D tensors (vectors)");
+    }
+    if (a_sh[0] != b_sh[0]) {
+        throw std::runtime_error("dotKernel: size mismatch");
+    }
+    if (Out.shape().size() != 0) {
+        throw std::runtime_error("dotKernel: output must be a scalar tensor");
+    }
+
+    size_t n = a_sh[0];
+    const float *a_data = A.data().data();
+    const float *b_data = B.data().data();
+
+    float result = 0.0f;
+    for (size_t i = 0; i < n; ++i) {
+        result += a_data[i] * b_data[i];
+    }
+
+    Out.data()[0] = result;
+}
+
 
 
 

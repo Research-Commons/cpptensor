@@ -20,5 +20,6 @@ namespace cpptensor {
             static void sigmoidKernel(const Tensor& A, Tensor& Out);
             static void reluKernel(const Tensor& A, Tensor& Out);
             static void gemmf32kernel(const Tensor& A, const Tensor& B, Tensor& Out);
+            static void dotKernel(const Tensor &A, const Tensor &B, Tensor & Out);
     };
 }
