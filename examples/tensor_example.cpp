@@ -619,6 +619,176 @@ int main() {
     std::cout << "\n===== EIG not available (requires OpenBLAS) =====\n";
 #endif
 
+
+    // ====== Tensor Manipulation Examples ======
+    std::cout << "\n\n===== TENSOR MANIPULATION EXAMPLES =====" << std::endl;
+
+    // 1. View Operations (zero-copy, shares data)
+    std::cout << "\n--- 1. View Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
+        std::cout << "Original A [2×3]: "; A.print();
+
+        Tensor B = A.view({3, 2});  // Reshape without copying
+        std::cout << "View B [3×2]: "; B.print();
+
+        // Modifying B modifies A (shared data)
+        B.data()[0] = 99.0f;
+        std::cout << "After modifying B[0]: A[0]=" << A.data()[0] << " (data shared!)" << std::endl;
+    }
+
+    // 2. Reshape Operations (smart: view if contiguous, else copy)
+    std::cout << "\n--- 2. Reshape Operations ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 3, 4}, 1.0f);  // [2×3×4] = 24 elements
+        std::cout << "Original A shape: [";
+        for (auto s : A.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        Tensor B = A.reshape({6, 4});
+        std::cout << "Reshaped B shape: [";
+        for (auto s : B.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        Tensor C = A.reshape({24});
+        std::cout << "Flattened C shape: [";
+        for (auto s : C.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 3. Flatten Operations
+    std::cout << "\n--- 3. Flatten Operations ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 3, 4}, 1.0f);
+        std::cout << "Original A shape: [2, 3, 4]" << std::endl;
+
+        Tensor B = A.flatten();  // Flatten all dimensions
+        std::cout << "Fully flattened shape: [";
+        for (auto s : B.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        Tensor C = A.flatten(1, 2);  // Flatten dims 1-2 only
+        std::cout << "Partially flattened (dims 1-2) shape: [";
+        for (auto s : C.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 4. Squeeze Operations (remove size-1 dimensions)
+    std::cout << "\n--- 4. Squeeze Operations ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 1, 3, 1, 4}, 1.0f);
+        std::cout << "Original A shape: [2, 1, 3, 1, 4]" << std::endl;
+
+        Tensor B = A.squeeze();  // Remove all size-1 dims
+        std::cout << "Squeezed (all) shape: [";
+        for (auto s : B.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        Tensor C = A.squeeze(1);  // Remove specific dim
+        std::cout << "Squeezed (dim 1) shape: [";
+        for (auto s : C.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 5. Unsqueeze Operations (add size-1 dimension)
+    std::cout << "\n--- 5. Unsqueeze Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
+        std::cout << "Original A shape: [2, 3]" << std::endl;
+
+        Tensor B = A.unsqueeze(0);  // Add dim at position 0
+        std::cout << "Unsqueezed (dim 0) shape: [";
+        for (auto s : B.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        Tensor C = A.unsqueeze(2);  // Add dim at position 2
+        std::cout << "Unsqueezed (dim 2) shape: [";
+        for (auto s : C.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 6. Permute Operations (arbitrary dimension reordering)
+    std::cout << "\n--- 6. Permute Operations ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 3, 4}, 1.0f);
+        std::cout << "Original A shape: [2, 3, 4]" << std::endl;
+
+        Tensor B = A.permute({2, 0, 1});  // Reorder to [4, 2, 3]
+        std::cout << "Permuted (2,0,1) shape: [";
+        for (auto s : B.shape()) std::cout << s << " ";
+        std::cout << "], contiguous=" << (B.is_contiguous() ? "yes" : "no") << std::endl;
+
+        // Permute changes memory layout, making it non-contiguous
+        Tensor C = B.contiguous();  // Make contiguous again
+        std::cout << "Made contiguous C: contiguous=" << (C.is_contiguous() ? "yes" : "no") << std::endl;
+    }
+
+    // 7. Transpose Operations
+    std::cout << "\n--- 7. Transpose Operations ---" << std::endl;
+    {
+        Tensor A({3, 4}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
+        std::cout << "Original A [3×4]:" << std::endl;
+        A.print();
+
+        Tensor B = A.transpose();  // Swap last two dims
+        std::cout << "Transposed B [4×3]:" << std::endl;
+        B.print();
+
+        // 3D tensor transpose
+        Tensor C = Tensor::full({2, 3, 4}, 1.0f);
+        Tensor D = C.transpose(0, 2);  // Swap dims 0 and 2
+        std::cout << "3D transpose (0,2): [2,3,4] -> [";
+        for (auto s : D.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 8. Contiguous Operations
+    std::cout << "\n--- 8. Contiguous Operations ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 3, 4}, 1.0f);
+        std::cout << "Original A: contiguous=" << (A.is_contiguous() ? "yes" : "no") << std::endl;
+
+        Tensor B = A.permute({2, 0, 1});
+        std::cout << "After permute: contiguous=" << (B.is_contiguous() ? "yes" : "no") << std::endl;
+
+        Tensor C = B.contiguous();
+        std::cout << "After contiguous(): contiguous=" << (C.is_contiguous() ? "yes" : "no") << std::endl;
+    }
+
+    // 9. Clone Operations (deep copy)
+    std::cout << "\n--- 9. Clone Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
+        Tensor B = A.clone();  // Independent copy
+
+        B.data()[0] = 99.0f;
+        std::cout << "After modifying clone: A[0]=" << A.data()[0]
+                  << ", B[0]=" << B.data()[0] << " (independent!)" << std::endl;
+    }
+
+    // 10. Complex Manipulation Sequence
+    std::cout << "\n--- 10. Complex Example: Image Batch Processing ---" << std::endl;
+    {
+        // Image batch: [batch=4, channels=3, height=64, width=64]
+        Tensor images = Tensor::full({4, 3, 64, 64}, 1.0f);
+        std::cout << "Image batch shape: [4, 3, 64, 64]" << std::endl;
+
+        // Permute to [batch, height, width, channels] (NHWC format)
+        Tensor nhwc = images.permute({0, 2, 3, 1});
+        std::cout << "NHWC format shape: [";
+        for (auto s : nhwc.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+
+        // Flatten spatial dimensions: [batch, height*width, channels]
+        Tensor flattened = nhwc.reshape({4, 64*64, 3});
+        std::cout << "Flattened spatial shape: [";
+        for (auto s : flattened.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    std::cout << "\n===== END OF EXAMPLES =====" << std::endl;
+
+
     // Run performance tests
     benchmark_matmul(512, 512, 512);
     benchmark_matmul(1024, 1024, 1024);
@@ -648,6 +818,7 @@ int main() {
     benchmark_eig(256, true);             // Small general matrix
     benchmark_eig(512, true);             // Medium general matrix
     benchmark_eig(1024, false);           // Large general, eigenvalues only
+
 
 
     //-----------------PROFILING---------------------

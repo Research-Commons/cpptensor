@@ -168,6 +168,41 @@ class Tensor {
                            float value,
                            DeviceType device = DeviceType::CPU);
 
+        /**
+         * @brief Create zero-copy view from raw pointer (advanced use)
+         *
+         * Creates a tensor that wraps existing data without copying. The caller
+         * must ensure the data remains valid for the lifetime of this tensor
+         * and any views derived from it. This is achieved by passing the owner's
+         * shared_ptr to keep it alive.
+         *
+         * **Use Case:** Efficient batch slicing in matmul, creating sub-tensor
+         * views without memory allocation.
+         *
+         * @param shape Dimensions of the tensor view
+         * @param data_ptr Pointer to existing data (must be valid for tensor lifetime)
+         * @param owner Shared pointer to owner tensor that keeps data alive
+         * @param device Device type of the data
+         * @return Tensor view wrapping the raw pointer (zero-copy)
+         *
+         * @warning Advanced feature. Incorrect use can lead to use-after-free.
+         *          Always pass valid owner to ensure data lifetime.
+         *
+         * @example
+         * ```cpp
+         * // Create view of batch slice without copying
+         * Tensor parent({10, 64, 64}, ...);
+         * float* slice_ptr = parent.data().data() + (5 * 64 * 64);  // Batch 5
+         * Tensor slice = Tensor::from_ptr({64, 64}, slice_ptr,
+         *                                  parent.impl(), parent.device_type());
+         * // slice shares data with parent - modifying slice modifies parent
+         * ```
+         */
+        static Tensor from_ptr(const std::vector<size_t>& shape,
+                              float* data_ptr,
+                              std::shared_ptr<TensorImpl> owner,
+                              DeviceType device = DeviceType::CPU);
+
         // =============== Shape and Metadata ===============
 
         /**
@@ -302,6 +337,167 @@ class Tensor {
          * @return Shared pointer to TensorImpl
          */
         std::shared_ptr<TensorImpl> impl() const;
+
+        // =============== Tensor Manipulation Operations ===============
+
+        /**
+         * @brief Create zero-copy view with new shape (requires contiguous tensor)
+         *
+         * Creates a new tensor that shares the underlying data but with a different
+         * shape. The total number of elements must remain the same. This is a
+         * zero-copy operation - no data is copied.
+         *
+         * @param new_shape New dimensions for the view
+         * @return Tensor view with new shape sharing the same data
+         * @throws std::runtime_error if total elements don't match or tensor not contiguous
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, ...);  // 24 elements
+         * Tensor B = A.view({4, 6}); // Same 24 elements, different shape
+         * B.data()[0] = 1.0f;        // Also modifies A!
+         * ```
+         */
+        Tensor view(const std::vector<size_t>& new_shape) const;
+
+        /**
+         * @brief Reshape tensor (zero-copy if contiguous, otherwise copies)
+         *
+         * Returns a tensor with the specified shape. If the original tensor is
+         * contiguous, this is zero-copy (same as view). Otherwise, data is copied
+         * to create a contiguous layout first.
+         *
+         * @param new_shape New dimensions
+         * @return Reshaped tensor
+         * @throws std::runtime_error if total elements don't match
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 6}, ...);
+         * Tensor B = A.reshape({3, 4});  // Zero-copy if A is contiguous
+         * ```
+         */
+        Tensor reshape(const std::vector<size_t>& new_shape) const;
+
+        /**
+         * @brief Flatten tensor into 1D vector
+         *
+         * @param start_dim First dimension to flatten (default: 0)
+         * @param end_dim Last dimension to flatten (default: -1, meaning last dim)
+         * @return Flattened tensor view or copy
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, ...);
+         * Tensor B = A.flatten();           // Shape: {24}
+         * Tensor C = A.flatten(1, 2);       // Shape: {2, 12}
+         * ```
+         */
+        Tensor flatten(int start_dim = 0, int end_dim = -1) const;
+
+        /**
+         * @brief Remove dimensions of size 1
+         *
+         * @param dim Dimension to squeeze (-1 means squeeze all size-1 dims)
+         * @return Squeezed tensor (zero-copy view)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 1, 3, 1}, ...);
+         * Tensor B = A.squeeze();      // Shape: {2, 3}
+         * Tensor C = A.squeeze(1);     // Shape: {2, 3, 1}
+         * ```
+         */
+        Tensor squeeze(int dim = -1) const;
+
+        /**
+         * @brief Add dimension of size 1
+         *
+         * @param dim Position to insert new dimension
+         * @return Unsqueezed tensor (zero-copy view)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3}, ...);
+         * Tensor B = A.unsqueeze(0);   // Shape: {1, 2, 3}
+         * Tensor C = A.unsqueeze(1);   // Shape: {2, 1, 3}
+         * Tensor D = A.unsqueeze(-1);  // Shape: {2, 3, 1}
+         * ```
+         */
+        Tensor unsqueeze(int dim) const;
+
+        /**
+         * @brief Permute tensor dimensions (generalized transpose)
+         *
+         * Reorders dimensions according to the given permutation. This creates
+         * a view with modified strides - the resulting tensor is NOT contiguous.
+         * Call contiguous() if you need contiguous memory layout.
+         *
+         * @param dims Permutation of dimensions (must be a permutation of 0..ndim-1)
+         * @return Permuted tensor (zero-copy view with non-contiguous strides)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, ...);
+         * Tensor B = A.permute({2, 0, 1});  // Shape: {4, 2, 3}
+         * Tensor C = A.permute({1, 0, 2});  // Swap first two dims
+         * ```
+         */
+        Tensor permute(const std::vector<int>& dims) const;
+
+        /**
+         * @brief Transpose two dimensions (2D transpose if no args given)
+         *
+         * @param dim0 First dimension to swap (default: 0 for 2D case)
+         * @param dim1 Second dimension to swap (default: 1 for 2D case)
+         * @return Transposed tensor (zero-copy view)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({3, 4}, ...);
+         * Tensor B = A.transpose();        // Shape: {4, 3} (swap dims 0,1)
+         *
+         * Tensor C({2, 3, 4}, ...);
+         * Tensor D = C.transpose(0, 2);    // Shape: {4, 3, 2}
+         * ```
+         */
+        Tensor transpose(int dim0 = 0, int dim1 = 1) const;
+
+        /**
+         * @brief Check if tensor has contiguous memory layout
+         *
+         * A tensor is contiguous if its strides match row-major ordering.
+         * Non-contiguous tensors may result from permute/transpose operations.
+         *
+         * @return true if tensor is contiguous (row-major), false otherwise
+         */
+        bool is_contiguous() const;
+
+        /**
+         * @brief Ensure tensor has contiguous memory layout
+         *
+         * Returns the tensor itself if already contiguous, otherwise returns
+         * a copy with contiguous (row-major) layout.
+         *
+         * @return Contiguous tensor (may be a copy)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3}, ...);
+         * Tensor B = A.transpose();     // Not contiguous
+         * Tensor C = B.contiguous();    // Contiguous copy
+         * ```
+         */
+        Tensor contiguous() const;
+
+        /**
+         * @brief Create deep copy of tensor
+         *
+         * Creates a new tensor with its own data buffer (no sharing).
+         *
+         * @return Independent copy of the tensor
+         */
+        Tensor clone() const;
 
         // =============== Reduction Operations ===============
         // TODO: Implement reduction operations

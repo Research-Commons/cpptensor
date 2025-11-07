@@ -96,6 +96,38 @@ namespace cpptensor {
                    float fill_value,
                    DeviceType device = DeviceType::CPU);
 
+        /**
+         * @brief Construct view TensorImpl that shares data with base tensor
+         *
+         * Creates a view tensor that references the same underlying data as
+         * the base tensor but with different shape/stride. Used for zero-copy
+         * operations like reshape, view, permute, etc.
+         *
+         * @param base Base TensorImpl to share data with
+         * @param new_shape Shape for the view
+         * @param new_stride Stride for the view (optional, computed if empty)
+         */
+        TensorImpl(std::shared_ptr<TensorImpl> base,
+                   const std::vector<size_t>& new_shape,
+                   const std::vector<size_t>& new_stride = {});
+
+        /**
+         * @brief Construct view TensorImpl that wraps raw pointer (zero-copy)
+         *
+         * Creates a view that wraps an existing raw pointer without copying data.
+         * Used for efficient batch slicing and sub-tensor views. The caller
+         * must ensure data validity through the owner parameter.
+         *
+         * @param shape Shape of the view
+         * @param data_ptr Raw pointer to existing data
+         * @param owner Base TensorImpl that owns the data (keeps it alive)
+         * @param device Device type of the data
+         */
+        TensorImpl(const std::vector<size_t>& shape,
+                   float* data_ptr,
+                   std::shared_ptr<TensorImpl> owner,
+                   DeviceType device = DeviceType::CPU);
+
         // =============== Data Accessors ===============
 
         /**
@@ -121,6 +153,24 @@ namespace cpptensor {
          * @warning Modifying data directly breaks autograd computation graph
          */
         std::vector<float>& data();
+
+        /**
+         * @brief Get raw pointer to data (for pointer-based views and BLAS)
+         *
+         * Returns a pointer to the actual data, whether it's stored in data_,
+         * accessed via base_impl_, or wrapped via data_ptr_. This is the
+         * preferred method for interfacing with external libraries like BLAS.
+         *
+         * @return Const pointer to data
+         */
+        const float* data_ptr() const;
+
+        /**
+         * @brief Get mutable raw pointer to data
+         *
+         * @return Mutable pointer to data
+         */
+        float* data_ptr();
 
         /**
          * @brief Get const reference to stride information
@@ -230,6 +280,24 @@ namespace cpptensor {
          * @brief Raw data buffer in row-major order
          */
         std::vector<float> data_;
+
+        /**
+         * @brief Base tensor for views (keeps base alive)
+         *
+         * When this TensorImpl is a view, base_impl_ points to the original
+         * tensor that owns the data. This keeps the data alive as long as
+         * any view exists.
+         */
+        std::shared_ptr<TensorImpl> base_impl_;
+
+        /**
+         * @brief Raw pointer for pointer-based views (zero-copy)
+         *
+         * When this TensorImpl wraps a raw pointer (created via from_ptr),
+         * this stores the pointer. The base_impl_ keeps the owner alive.
+         * If null, uses data_ vector instead.
+         */
+        float* data_ptr_;
 
         /**
          * @brief Stride information for each dimension

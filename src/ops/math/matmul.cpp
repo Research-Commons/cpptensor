@@ -10,7 +10,46 @@
 #ifdef USE_OPENBLAS
 #include <cblas.h>
 #endif
+
 namespace cpptensor {
+
+    // =============== Helper Functions for Optimization ===============
+
+    namespace {
+        /**
+         * @brief Check if tensor represents a transposed view
+         *
+         * Detects if a 2D tensor has column-major stride pattern (transposed).
+         * For row-major: stride[0] > stride[1] (e.g., [3, 1] for [2×3])
+         * For col-major: stride[0] < stride[1] (e.g., [1, 2] for [2×3])
+         */
+        bool is_transposed(const Tensor& T) {
+            if (T.ndim() != 2) return false;
+            auto st = T.stride();
+            // Transposed: stride[0] < stride[1] (column-major)
+            return st[0] < st[1];
+        }
+
+        /**
+         * @brief Check if a batch slice is contiguous in memory
+         *
+         * Determines whether extracting a batch slice requires copying or
+         * can be done with a zero-copy view.
+         */
+        bool is_batch_slice_contiguous(const Tensor& T) {
+            auto st = T.stride();
+            auto sh = T.shape();
+            size_t ndim = sh.size();
+
+            if (ndim < 2) return false;
+
+            // Check last two dims are contiguous (row-major)
+            if (st[ndim-1] != 1) return false;
+            if (st[ndim-2] != sh[ndim-1]) return false;
+
+            return true;
+        }
+    }
 
     Tensor matmul(const Tensor& A, const Tensor& B) {
         if (A.device_type() != B.device_type()) {
@@ -116,20 +155,37 @@ namespace cpptensor {
             //where in C's memory should I write the result?
             const size_t baseC = compute_base_offset(batch_index, out_batch, Cstride, LO, 0);
 
-            // build 2D Tensor views via contiguous copies (req by gemm to be fast) for this batch and call gemm
-            //move pointer to the start of this batch's A slice
-            const float* A_ptr = A.data().data() + baseA;
-            const float* B_ptr = B.data().data() + baseB;
+            Tensor A2D, B2D;
 
-            //allocate temporary flat memory for a M×K 2D matrix
-            std::vector<float> A_block(M * K);
-            //allocate [K×N] matrix for B's slice
-            std::vector<float> B_block(K * N);
-            std::copy(A_ptr, A_ptr + (M * K), A_block.begin());
-            std::copy(B_ptr, B_ptr + (K * N), B_block.begin());
+            // Check if we can create zero-copy views
+            bool A_is_contiguous = is_batch_slice_contiguous(A);
+            bool B_is_contiguous = is_batch_slice_contiguous(B);
 
-            Tensor A2D({M, K}, A_block, A.device_type());
-            Tensor B2D({K, N}, B_block, B.device_type());
+            if (A_is_contiguous) {
+                // Zero-copy view using raw pointer
+                float* A_ptr = const_cast<float*>(A.data().data() + baseA);
+                A2D = Tensor::from_ptr({M, K}, A_ptr, A.impl(), A.device_type());
+            } else {
+                // Need to copy (non-contiguous batch slice)
+                const float* A_ptr = A.data().data() + baseA;
+                std::vector<float> A_block(M * K);
+                std::copy(A_ptr, A_ptr + (M * K), A_block.begin());
+                A2D = Tensor({M, K}, A_block, A.device_type());
+            }
+
+            if (B_is_contiguous) {
+                // Zero-copy view using raw pointer
+                float* B_ptr = const_cast<float*>(B.data().data() + baseB);
+                B2D = Tensor::from_ptr({K, N}, B_ptr, B.impl(), B.device_type());
+            } else {
+                // Need to copy (non-contiguous batch slice)
+                const float* B_ptr = B.data().data() + baseB;
+                std::vector<float> B_block(K * N);
+                std::copy(B_ptr, B_ptr + (K * N), B_block.begin());
+                B2D = Tensor({K, N}, B_block, B.device_type());
+            }
+
+            // Call gemm on the 2D slices
             Tensor C2D = gemm(A2D, B2D);
 
             // copy result back into the correct batch region of C
@@ -143,6 +199,11 @@ namespace cpptensor {
 
 
     Tensor gemm(const Tensor& A, const Tensor& B) {
+        // OPTIMIZATION: Detect transpose to use BLAS flags instead of copying
+        bool A_trans = is_transposed(A);
+        bool B_trans = is_transposed(B);
+
+        // Get actual dimensions (accounting for transpose)
         size_t M = A.shape()[0];
         size_t K = A.shape()[1];
         size_t KB = B.shape()[0];
@@ -155,19 +216,13 @@ namespace cpptensor {
         Tensor C = Tensor::full({M, N}, 0.0f, A.device_type());
 
     #ifdef USE_OPENBLAS
-        // ===== Use OpenBLAS SGEMM =====
+        // ===== Use OpenBLAS SGEMM with transpose detection =====
         //
-        // SGEMM performs: C = alpha * A * B + beta * C
-        // A: MxK
-        // B: KxN
-        // C: MxN
+        // SGEMM performs: C = alpha * op(A) * op(B) + beta * C
+        // where op(X) = X or X^T depending on transpose flags
         //
-        // We assume row-major layout for all tensors.
-        //
-        // CBLAS expects leading dimensions (lda, ldb, ldc) to match the
-        // number of columns in each matrix for row-major ordering.
-
-        //openblas_set_num_threads(1);
+        // If tensor is transposed (column-major strides), we can use
+        // CblasTrans flag instead of forcing a contiguous() copy.
 
         const float alpha = 1.0f;
         const float beta = 0.0f;
@@ -176,18 +231,28 @@ namespace cpptensor {
         const float* Bdata = B.data().data();
         float* Cdata = C.data().data();
 
+        // Set transpose flags based on stride pattern
+        CBLAS_TRANSPOSE transA = A_trans ? CblasTrans : CblasNoTrans;
+        CBLAS_TRANSPOSE transB = B_trans ? CblasTrans : CblasNoTrans;
+
+        // Leading dimensions depend on actual memory layout
+        // For transposed matrices, leading dim is the other dimension
+        int lda = A_trans ? static_cast<int>(M) : static_cast<int>(K);
+        int ldb = B_trans ? static_cast<int>(K) : static_cast<int>(N);
+        int ldc = static_cast<int>(N);
+
         cblas_sgemm(
             CblasRowMajor,    // row-major storage
-            CblasNoTrans,     // A not transposed
-            CblasNoTrans,     // B not transposed
-            static_cast<int>(M), // rows of A and C
-            static_cast<int>(N), // cols of B and C
+            transA,           // Use detected transpose flag for A
+            transB,           // Use detected transpose flag for B
+            static_cast<int>(M), // rows of op(A) and C
+            static_cast<int>(N), // cols of op(B) and C
             static_cast<int>(K), // shared dimension
-            alpha,             // scaling for A * B
-            Adata, static_cast<int>(K), // A, leading dimension = K
-            Bdata, static_cast<int>(N), // B, leading dimension = N
+            alpha,             // scaling for op(A) * op(B)
+            Adata, lda,        // A with correct leading dimension
+            Bdata, ldb,        // B with correct leading dimension
             beta,              // scaling for existing C
-            Cdata, static_cast<int>(N)  // C, leading dimension = N
+            Cdata, ldc         // C, leading dimension = N
         );
     #else
         KernelRegistry::instance().getKernel(OpType::Matmul, A.device_type())(A, B, C);
