@@ -5,10 +5,6 @@
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/activation/relu.hpp"
 #include "cpptensor/ops/activation/sigmoid.hpp"
-#include "cpptensor/ops/arithmetic/add.hpp"
-#include "cpptensor/ops/arithmetic/div.hpp"
-#include "cpptensor/ops/arithmetic/neg.hpp"
-#include "cpptensor/ops/arithmetic/mul.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/arithmetic/sub.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
@@ -20,6 +16,7 @@
 #include "cpptensor/ops/math/sin.hpp"
 #include "cpptensor/ops/math/sqrt.hpp"
 #include "cpptensor/ops/math/tan.hpp"
+
 
 using namespace cpptensor;
 
@@ -181,6 +178,79 @@ static void BM_Dot_AVX2(benchmark::State& state) {
     }
 }
 
+// Reduction Operations
+static void BM_Sum_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sum_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.sum();  // Global sum
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Sum_Dim_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sum_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.sum(0);  // Sum along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Mean_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mean_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.mean();  // Global mean
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Mean_Dim_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mean_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.mean(0);  // Mean along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Max_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.max();  // Global max
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Max_Dim_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.max(0);  // Max along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Min_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.min();  // Global min
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Min_Dim_AVX2(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.min(0);  // Min along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 BENCHMARK(BM_Add_AVX2);
 BENCHMARK(BM_Mul_AVX2);
 BENCHMARK(BM_Exp_AVX2);
@@ -195,5 +265,13 @@ BENCHMARK(BM_Sigmoid_AVX2);
 BENCHMARK(BM_Relu_AVX2);
 BENCHMARK(BM_Matmul_AVX2);
 BENCHMARK(BM_Dot_AVX2);
+BENCHMARK(BM_Sum_AVX2);
+BENCHMARK(BM_Sum_Dim_AVX2);
+BENCHMARK(BM_Mean_AVX2);
+BENCHMARK(BM_Mean_Dim_AVX2);
+BENCHMARK(BM_Max_AVX2);
+BENCHMARK(BM_Max_Dim_AVX2);
+BENCHMARK(BM_Min_AVX2);
+BENCHMARK(BM_Min_Dim_AVX2);
 
 BENCHMARK_MAIN();
