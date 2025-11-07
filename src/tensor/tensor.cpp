@@ -1,4 +1,8 @@
 #include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/ops/reduction/sum.hpp"
+#include "cpptensor/ops/reduction/mean.hpp"
+#include "cpptensor/ops/reduction/max.hpp"
+#include "cpptensor/ops/reduction/min.hpp"
 
 #include <random>
 #include <algorithm>
@@ -381,141 +385,40 @@ namespace cpptensor {
         return Tensor(shape(), impl_->data(), device_type());
     }
 
-} // namespace cpptensor
+    // =============== Reduction Operations Implementation ===============
 
-// // -------- Reductions (only global dim implemented for now) --------
-// Tensor Tensor::sum(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("sum(dim) not implemented yet (only global sum)");
-//     float acc = 0.0f;
-//     for (float v : impl_->data()) acc += v;
-//     // return scalar as shape {1}
-//     return Tensor({1}, std::vector<float>{acc}, false);
-// }
-//
-// Tensor Tensor::mean(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("mean(dim) not implemented yet (only global mean)");
-//     float acc = 0.0f;
-//     for (float v : impl_->data()) acc += v;
-//     return Tensor({1}, std::vector<float>{acc / (float)numel()}, false);
-// }
-//
-// Tensor Tensor::max(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("max(dim) not implemented yet (only global max)");
-//     const auto &d = impl_->data();
-//     if (d.empty()) throw std::runtime_error("max on empty tensor");
-//     float m = d[0];
-//     for (auto v : d) if (v > m) m = v;
-//     return Tensor({1}, std::vector<float>{m}, false);
-// }
-//
-// // -------- Elementwise operators (simple implementations) --------
-// static void check_shapes_match(const Tensor& a, const Tensor& b) {
-//     if (a.shape() != b.shape()) throw std::runtime_error("shape mismatch in binary op");
-// }
-//
-// Tensor operator+(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] + Bd[i];
-//     return out;
-// }
-//
-// Tensor operator-(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] - Bd[i];
-//     return out;
-// }
-//
-// Tensor operator*(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] * Bd[i];
-//     return out;
-// }
-//
-// Tensor operator/(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) {
-//         if (Bd[i] == 0.0f) Od[i] = std::numeric_limits<float>::infinity();
-//         else Od[i] = Ad[i] / Bd[i];
-//     }
-//     return out;
-// }
-//
-// // Scalar ops
-// Tensor operator+(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] + s;
-//     return out;
-// }
-// Tensor operator+(float s, const Tensor& a) { return a + s; }
-//
-// Tensor operator-(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] - s;
-//     return out;
-// }
-// Tensor operator-(float s, const Tensor& a) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = s - Ad[i];
-//     return out;
-// }
-//
-// Tensor operator*(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] * s;
-//     return out;
-// }
-// Tensor operator*(float s, const Tensor& a) { return a * s; }
-//
-// Tensor operator/(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     if (s == 0.0f) {
-//         for (size_t i = 0; i < Ad.size(); ++i) Od[i] = std::numeric_limits<float>::infinity();
-//     } else {
-//         for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] / s;
-//     }
-//     return out;
-// }
-// Tensor operator/(float s, const Tensor& a) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) {
-//         if (Ad[i] == 0.0f) Od[i] = std::numeric_limits<float>::infinity();
-//         else Od[i] = s / Ad[i];
-//     }
-//     return out;
-// }
-//
-// Tensor operator-(const Tensor& a) {
-//     return a * (-1.0f);
-// }
+    // Global reduction overloads (no dim parameter)
+    Tensor Tensor::sum(bool keepdim) const {
+        return cpptensor::sum(*this, std::nullopt, keepdim);
+    }
+
+    Tensor Tensor::mean(bool keepdim) const {
+        return cpptensor::mean(*this, std::nullopt, keepdim);
+    }
+
+    Tensor Tensor::max(bool keepdim) const {
+        return cpptensor::max(*this, -1, keepdim);
+    }
+
+    Tensor Tensor::min(bool keepdim) const {
+        return cpptensor::min(*this, -1, keepdim);
+    }
+
+    // Dimensional reduction overloads (with dim parameter)
+    Tensor Tensor::sum(int dim, bool keepdim) const {
+        return cpptensor::sum(*this, std::optional<int>(dim), keepdim);
+    }
+
+    Tensor Tensor::mean(int dim, bool keepdim) const {
+        return cpptensor::mean(*this, std::optional<int>(dim), keepdim);
+    }
+
+    Tensor Tensor::max(int dim, bool keepdim) const {
+        return cpptensor::max(*this, dim, keepdim);
+    }
+
+    Tensor Tensor::min(int dim, bool keepdim) const {
+        return cpptensor::min(*this, dim, keepdim);
+    }
+
+} // namespace cpptensor

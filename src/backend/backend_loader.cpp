@@ -31,6 +31,12 @@ namespace cpptensor {
         R.registerUnaryKernel(OpType::Sigmoid, DeviceType::CPU, CPU::sigmoidKernel);
         R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CPU::reluKernel);
 
+        // Reduction operations
+        R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CPU::sumKernel);
+        R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CPU::meanKernel);
+        R.registerReductionKernel(OpType::Max, DeviceType::CPU, CPU::maxKernel);
+        R.registerReductionKernel(OpType::Min, DeviceType::CPU, CPU::minKernel);
+
 #ifdef BUILD_AVX2
         R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::add_f32_avx2);
         R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mul_f32_avx2);
@@ -49,6 +55,12 @@ namespace cpptensor {
         R.registerUnaryKernel(OpType::Tan, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::tan_f32_avx2);
         R.registerUnaryKernel(OpType::Sigmoid, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sigmoid_f32_avx2);
         R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::relu_f32_avx2);
+
+        // AVX2 Reduction operations
+        R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sum_f32_avx2);
+        R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mean_f32_avx2);
+        R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
+        R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
 #endif
 
 #ifdef BUILD_AVX512
@@ -56,6 +68,12 @@ namespace cpptensor {
         R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::mul_f32_avx512);
         R.registerKernel(OpType::Matmul, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::gemm_f32_avx512);
         R.registerKernel(OpType::Dot,    DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::dot_f32_avx512);
+
+        // AVX-512 Reduction operations
+        R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::sum_f32_avx512);
+        R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::mean_f32_avx512);
+        R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::max_f32_avx512);
+        R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::min_f32_avx512);
 #endif
 
 #ifdef BUILD_CUDA
