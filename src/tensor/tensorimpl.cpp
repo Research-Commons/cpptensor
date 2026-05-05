@@ -5,6 +5,24 @@
 
 namespace cpptensor {
 
+    namespace {
+        bool has_row_major_stride(const std::vector<size_t>& shape,
+                                  const std::vector<size_t>& stride) {
+            if (shape.size() != stride.size()) {
+                return false;
+            }
+
+            size_t expected_stride = 1;
+            for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
+                if (stride[static_cast<size_t>(i)] != expected_stride) {
+                    return false;
+                }
+                expected_stride *= shape[static_cast<size_t>(i)];
+            }
+            return true;
+        }
+    } // namespace
+
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            const std::vector<float>& data,
                            DeviceType device)
@@ -84,20 +102,86 @@ namespace cpptensor {
         // data_ is empty - we use data_ptr_ instead
     }
 
-    const std::vector<float>& TensorImpl::data() const {
-        // If this is a view, delegate to base
-        if (base_impl_) {
-            return base_impl_->data();
+    bool TensorImpl::can_expose_direct_data_buffer() const {
+        if (data_ptr_ != nullptr) {
+            return false;
         }
-        return data_;
+
+        if (!base_impl_) {
+            return true;
+        }
+
+        if (offset_ != 0) {
+            return false;
+        }
+
+        if (!has_row_major_stride(shape_, stride_)) {
+            return false;
+        }
+
+        if (numel() != base_impl_->numel()) {
+            return false;
+        }
+
+        return base_impl_->can_expose_direct_data_buffer();
+    }
+
+    void TensorImpl::materialize_logical_data(std::vector<float>& out) const {
+        const size_t total = numel();
+        out.resize(total);
+
+        if (total == 0) {
+            return;
+        }
+
+        const float* src = data_ptr();
+        if (shape_.empty()) {
+            out[0] = src[0];
+            return;
+        }
+
+        std::vector<size_t> indices(shape_.size(), 0);
+        for (size_t i = 0; i < total; ++i) {
+            size_t src_offset = 0;
+            for (size_t d = 0; d < shape_.size(); ++d) {
+                src_offset += indices[d] * stride_[d];
+            }
+
+            out[i] = src[src_offset];
+
+            for (int d = static_cast<int>(shape_.size()) - 1; d >= 0; --d) {
+                const size_t dim = static_cast<size_t>(d);
+                if (++indices[dim] < shape_[dim]) {
+                    break;
+                }
+                indices[dim] = 0;
+            }
+        }
+    }
+
+    const std::vector<float>& TensorImpl::data() const {
+        if (can_expose_direct_data_buffer()) {
+            if (base_impl_) {
+                return base_impl_->data();
+            }
+            return data_;
+        }
+
+        materialize_logical_data(logical_data_cache_);
+        return logical_data_cache_;
     }
 
     std::vector<float>& TensorImpl::data() {
-        // If this is a view, delegate to base
-        if (base_impl_) {
-            return base_impl_->data();
+        if (can_expose_direct_data_buffer()) {
+            if (base_impl_) {
+                return base_impl_->data();
+            }
+            return data_;
         }
-        return data_;
+
+        throw std::runtime_error(
+            "Tensor::data(): mutable access is unavailable for sliced, permuted, "
+            "transposed, or pointer-backed views. Call contiguous() or clone() first.");
     }
 
     const float* TensorImpl::data_ptr() const {

@@ -276,9 +276,13 @@ class Tensor {
         // =============== Data Access ===============
 
         /**
-         * @brief Get const reference to underlying data
+         * @brief Get const reference to flattened logical tensor contents
          *
-         * @return Const reference to flattened data vector (row-major order)
+         * For owning tensors and full contiguous views, this exposes the
+         * underlying storage directly. For non-trivial views, it returns a
+         * compact row-major snapshot of the view contents.
+         *
+         * @return Const reference to flattened logical values
          *
          * @warning Direct data access bypasses abstraction. Use carefully.
          *
@@ -291,11 +295,17 @@ class Tensor {
         const std::vector<float>& data() const;
 
         /**
-         * @brief Get mutable reference to underlying data
+         * @brief Get mutable reference to direct backing storage
          *
-         * @return Mutable reference to flattened data vector
+         * Only tensors backed by a single compact storage vector expose mutable
+         * data directly. Non-trivial views throw instead of silently exposing
+         * unrelated base storage.
          *
-         * @warning Modifying data directly may break invariants. Prefer operations.
+         * @return Mutable reference to flattened backing storage
+         *
+         * @warning Modifying data directly may break invariants. Prefer
+         *          operations. Non-trivial views must be materialized with
+         *          contiguous() or clone() first.
          *
          * @example
          * ```cpp
@@ -421,8 +431,9 @@ class Tensor {
          * Tensor C = A.slice(1, -10, -1);        // last 9 cols → shape {10, 9, 30}
          * Tensor D = A.slice(2, 0, std::nullopt, 2);  // every 2nd → shape {10, 20, 15}
          *
-         * // Modifying slice modifies original (zero-copy view)
-         * B.data()[0] = 42.0f;  // Also changes A
+         * // Non-trivial views materialize const data() and reject mutable data()
+         * const auto& logical = B.data();
+         * Tensor B_copy = B.contiguous();  // Compact mutable copy
          * ```
          */
         Tensor slice(int dim,

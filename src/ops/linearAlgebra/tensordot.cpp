@@ -55,6 +55,7 @@ namespace cpptensor {
         // strides
         auto in_stride = T.stride();
         auto out_stride = compute_strides(out_shape);
+        const float* src = T.impl()->data_ptr();
 
         // map each output position to input offset
         size_t total = 1; for (auto d : out_shape) total *= d;
@@ -76,7 +77,7 @@ namespace cpptensor {
                 size_t id = static_cast<size_t>(perm[od]);
                 in_off += coord * in_stride[id];
             }
-            out_data[pos] = T.data()[in_off];
+            out_data[pos] = src[in_off];
         }
 
         return Tensor(out_shape, out_data, T.device_type());
