@@ -16,7 +16,8 @@ namespace {
         }
     }
 
-    // Helper function to copy a slice from src tensor to dst tensor at given offset along concat_dim
+    // Helper function to copy a slice from src tensor to dst tensor at given
+    // offset along concat_dim.
     void copySlice(Tensor& dst, const Tensor& src, int concat_dim, size_t offset_in_concat_dim) {
         auto src_shape = src.shape();
         auto dst_shape = dst.shape();
@@ -25,9 +26,10 @@ namespace {
 
         int ndim = static_cast<int>(src_shape.size());
 
-        // Get pointers to data
-        float* dst_data = dst.data().data();
-        const float* src_data = src.data().data();
+        // Use offset-aware raw pointers so zero-copy views copy their logical
+        // contents instead of starting from the base tensor's storage origin.
+        float* dst_data = dst.impl()->data_ptr();
+        const float* src_data = src.impl()->data_ptr();
 
         // Compute total iterations needed (product of all dims except concat_dim)
         size_t total_iterations = 1;
@@ -40,8 +42,8 @@ namespace {
         // Size of contiguous chunk to copy along concat dimension
         size_t concat_size = src_shape[concat_dim];
 
-        // If the concat dimension is the last dimension and both tensors are contiguous,
-        // we can optimize with fewer, larger memcpy calls
+        // If the concat dimension is the last dimension and both tensors are
+        // contiguous, we can optimize with fewer, larger memcpy calls.
         bool can_optimize = (concat_dim == ndim - 1) && src.is_contiguous() && dst.is_contiguous();
 
         if (can_optimize) {
@@ -170,14 +172,12 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     size_t offset_in_concat_dim = 0;
 
     for (const auto& t : tensors) {
-        // Make contiguous if needed for efficient copying
-        Tensor src = t.is_contiguous() ? t : t.contiguous();
+        // Copy directly from the logical tensor view. copySlice() handles
+        // offsets for contiguous views and strides for non-contiguous ones.
+        copySlice(result, t, concat_dim, offset_in_concat_dim);
 
-        // Copy this tensor's data into the result at the current offset
-        copySlice(result, src, concat_dim, offset_in_concat_dim);
-
-        // Move offset forward by this tensor's size in concat dimension
-        offset_in_concat_dim += src.shape()[concat_dim];
+        // Move offset forward by this tensor's size in concat dimension.
+        offset_in_concat_dim += t.shape()[concat_dim];
     }
 
     return result;
