@@ -4,6 +4,8 @@
 #include "cpptensor/backend/backend_loader.hpp"
 #include "cpptensor/ops/arithmetic/div.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
+#include "cpptensor/ops/comparison/eq.hpp"
+#include "cpptensor/ops/comparison/lt.hpp"
 #include "cpptensor/ops/math/exp.hpp"
 #include "cpptensor/ops/math/log.hpp"
 #include "cpptensor/ops/math/sqrt.hpp"
@@ -31,16 +33,23 @@ TEST_CASE("CUDA-tagged tensors fail clearly when a binary kernel is unavailable"
 #endif
 }
 
-TEST_CASE("mixed-device arithmetic fails at the operator boundary",
-          "[dispatcher][device-mismatch][arithmetic]") {
+TEST_CASE("mixed-device binary ops fail with a consistent boundary error",
+          "[dispatcher][device-mismatch][binary]") {
     cpptensor::initialize_kernels();
 
     cpptensor::Tensor cpu({2}, {1.0f, 2.0f}, DeviceType::CPU);
     cpptensor::Tensor cuda({2}, {3.0f, 4.0f}, DeviceType::CUDA);
 
-    REQUIRE_THROWS_WITH(cpu - cuda, ContainsSubstring("Device mismatch in sub"));
-    REQUIRE_THROWS_WITH(cpu * cuda, ContainsSubstring("Device mismatch in mul"));
-    REQUIRE_THROWS_WITH(cpu / cuda, ContainsSubstring("Device mismatch in div"));
+    REQUIRE_THROWS_WITH(cpu - cuda,
+                        ContainsSubstring("Binary op requires matching devices, got lhs=CPU and rhs=CUDA"));
+    REQUIRE_THROWS_WITH(cuda * cpu,
+                        ContainsSubstring("Binary op requires matching devices, got lhs=CUDA and rhs=CPU"));
+    REQUIRE_THROWS_WITH(cpu / cuda,
+                        ContainsSubstring("Binary op requires matching devices, got lhs=CPU and rhs=CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::eq(cpu, cuda),
+                        ContainsSubstring("Binary op requires matching devices, got lhs=CPU and rhs=CUDA"));
+    REQUIRE_THROWS_WITH((cuda < cpu),
+                        ContainsSubstring("Binary op requires matching devices, got lhs=CUDA and rhs=CPU"));
 }
 
 TEST_CASE("CUDA-tagged tensors fail clearly when a unary kernel is unavailable",
