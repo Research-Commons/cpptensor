@@ -459,7 +459,7 @@ namespace cpptensor {
 
         // Copy data in contiguous (row-major) order
         std::vector<size_t> indices(sh.size(), 0);
-        const float* src = impl_->data().data();
+        const float* src = impl_->data_ptr();
 
         for (size_t i = 0; i < total; ++i) {
             // Compute offset in original tensor using strides

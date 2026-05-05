@@ -579,6 +579,8 @@ Tensor Tensor::contiguous() const {
 **Smart Copying:**
 - If already contiguous → returns self (no copy)
 - If non-contiguous → creates new tensor with contiguous (row-major) layout
+- Uses the view's offset-aware data pointer, so sliced and raw-pointer-backed views
+  materialize their logical values correctly
 
 **Examples:**
 ```cpp
