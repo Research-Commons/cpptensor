@@ -26,6 +26,7 @@ namespace cpptensor {
         // 2. Get reference shape from first tensor
         const auto& first_tensor = tensors[0];
         auto ref_shape = first_tensor.shape();
+        const DeviceType common_device = first_tensor.device_type();
         int ndim = static_cast<int>(ref_shape.size());
 
         // 3. Normalize dimension (handle negative indexing)
@@ -45,13 +46,13 @@ namespace cpptensor {
         }
 
         // 4. Validate all tensors have the same shape
-        for (size_t i = 1; i < tensors.size(); ++i) {
+        for (size_t i = 0; i < tensors.size(); ++i) {
             const auto& t = tensors[i];
             auto t_shape = t.shape();
 
-            if (t.device_type() != first_tensor.device_type()) {
+            if (t.device_type() != common_device) {
                 throw std::runtime_error("stack: all tensors must be on the same device. Tensor 0 is on " +
-                                         std::string(deviceTypeName(first_tensor.device_type())) +
+                                         std::string(deviceTypeName(common_device)) +
                                          ", but tensor " + std::to_string(i) + " is on " +
                                          std::string(deviceTypeName(t.device_type())));
             }
@@ -81,8 +82,11 @@ namespace cpptensor {
         unsqueezed.reserve(tensors.size());
 
         for (const auto& t : tensors) {
-            // unsqueeze adds a dimension of size 1 at the specified position
-            unsqueezed.push_back(t.unsqueeze(stack_dim));
+            // reshape-backed unsqueeze() requires contiguous storage. Preserve
+            // the logical contents of non-contiguous operands explicitly before
+            // inserting the new dimension.
+            Tensor contiguous_input = t.is_contiguous() ? t : t.contiguous();
+            unsqueezed.push_back(contiguous_input.unsqueeze(stack_dim));
         }
 
         // 6. Use cat to concatenate along the new dimension

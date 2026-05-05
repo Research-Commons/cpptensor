@@ -260,6 +260,14 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
     require_data(cuda_result, {1, 2, 3, 4});
     REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
 
+    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
+
+    auto negative_dim_result = cpptensor::cat({cuda_matrix_a, cuda_matrix_b}, -1);
+    require_shape(negative_dim_result, {2, 4});
+    require_data(negative_dim_result, {1, 2, 5, 6, 3, 4, 7, 8});
+    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
+
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
@@ -280,6 +288,10 @@ TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     auto dim2 = cpptensor::stack({a, b}, 2);
     require_shape(dim2, {2, 2, 2});
     require_data(dim2, {1, 5, 2, 6, 3, 7, 4, 8});
+
+    auto neg_dim = cpptensor::stack({a, b}, -1);
+    require_shape(neg_dim, {2, 2, 2});
+    require_data(neg_dim, dim2.data());
 }
 
 TEST_CASE("cat preserves logical data from tensor views", "[manipulation][cat][views]") {
@@ -327,6 +339,26 @@ TEST_CASE("cat preserves logical data from tensor views", "[manipulation][cat][v
 
         require_shape(from_view, {6});
         require_data(from_view, {1, 3, 5, 1, 3, 5});
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("transposed views match owning tensors") {
+        cpptensor::Tensor matrix({2, 3}, {
+            0, 1, 2,
+            3, 4, 5
+        });
+        auto view = matrix.transpose(0, 1);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::cat({view, view}, -1);
+        auto from_owning = cpptensor::cat({owning, owning}, -1);
+
+        require_shape(from_view, {3, 4});
+        require_data(from_view, {
+            0, 3, 0, 3,
+            1, 4, 1, 4,
+            2, 5, 2, 5
+        });
         require_data(from_view, from_owning.data());
     }
 }
@@ -396,6 +428,14 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
     require_shape(cuda_result, {2, 2});
     require_data(cuda_result, {1, 2, 3, 4});
     REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
+
+    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
+
+    auto negative_dim_result = cpptensor::stack({cuda_matrix_a, cuda_matrix_b}, -1);
+    require_shape(negative_dim_result, {2, 2, 2});
+    require_data(negative_dim_result, {1, 5, 2, 6, 3, 7, 4, 8});
+    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
 
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),

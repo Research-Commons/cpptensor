@@ -10,7 +10,12 @@ namespace cpptensor {
      * concatenates along an existing dimension, stack() creates a new dimension
      * at the specified position and stacks the tensors there.
      *
-     * All input tensors must have exactly the same shape.
+     * All input tensors must have exactly the same shape and live on the same
+     * device.
+     *
+     * The output tensor preserves the common input device. Non-contiguous
+     * inputs are stacked by their logical values; view operands may be
+     * materialized internally before inserting the new dimension.
      *
      * @param tensors Vector of tensors to stack (must be non-empty)
      * @param dim Position to insert new dimension (supports negative indexing)
@@ -19,6 +24,7 @@ namespace cpptensor {
      *
      * @throws std::runtime_error if tensors is empty
      * @throws std::runtime_error if tensors have different shapes
+     * @throws std::runtime_error if tensors are on different devices
      * @throws std::runtime_error if dim is out of range
      *
      * @example
