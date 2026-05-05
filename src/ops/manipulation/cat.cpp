@@ -5,6 +5,17 @@
 namespace cpptensor {
 
 namespace {
+    const char* deviceTypeName(DeviceType device) {
+        switch (device) {
+            case DeviceType::CPU:
+                return "CPU";
+            case DeviceType::CUDA:
+                return "CUDA";
+            default:
+                return "Unknown";
+        }
+    }
+
     // Helper function to copy a slice from src tensor to dst tensor at given offset along concat_dim
     void copySlice(Tensor& dst, const Tensor& src, int concat_dim, size_t offset_in_concat_dim) {
         auto src_shape = src.shape();
@@ -119,6 +130,13 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
         const auto& t = tensors[i];
         auto t_shape = t.shape();
 
+        if (t.device_type() != first_tensor.device_type()) {
+            throw std::runtime_error("cat: all tensors must be on the same device. Tensor 0 is on " +
+                                     std::string(deviceTypeName(first_tensor.device_type())) +
+                                     ", but tensor " + std::to_string(i) + " is on " +
+                                     std::string(deviceTypeName(t.device_type())));
+        }
+
         // Check number of dimensions matches
         if (static_cast<int>(t_shape.size()) != ndim) {
             throw std::runtime_error("cat: all tensors must have the same number of dimensions. "
@@ -146,7 +164,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     out_shape[concat_dim] = total_concat_size;
 
     // 6. Allocate output tensor (initialized to zero)
-    Tensor result = Tensor::zeros(out_shape);
+    Tensor result = Tensor::zeros(out_shape, first_tensor.device_type());
 
     // 7. Copy data from each input tensor to the output
     size_t offset_in_concat_dim = 0;
