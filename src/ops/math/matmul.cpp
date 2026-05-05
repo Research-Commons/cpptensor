@@ -321,18 +321,10 @@ namespace cpptensor {
             1                        // stride in y (contiguous)
         );
     #else
-        // Fallback: portable row-major matrix-vector multiply.
-        const float* Adata = A.data().data();
-        const float* xdata = x.data().data();
-        float* ydata = y.data().data();
-
-        for (size_t row = 0; row < M; ++row) {
-            float acc = 0.0f;
-            for (size_t col = 0; col < N; ++col) {
-                acc += Adata[row * N + col] * xdata[col];
-            }
-            ydata[row] = acc;
-        }
+        // Fallback: use CPU kernel with SIMD optimization
+        // The gemvKernel will automatically dispatch to AVX512/AVX2 if available
+        //TODO : switch to proper kernel dispatcher
+        cpptensor::CPU::gemvKernel(A, x, y);
     #endif
 
         return y;
