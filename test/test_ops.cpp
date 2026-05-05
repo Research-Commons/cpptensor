@@ -583,6 +583,46 @@ TEST_CASE("sub mul and div support asymmetric broadcasting from the right-hand o
     require_data(quotient, {0.1f, 0.1f, 0.1f, 0.025f, 0.04f, 0.05f});
 }
 
+TEST_CASE("sub mul and div derive mixed-rank broadcast shapes from both operands",
+          "[arithmetic][broadcast]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor lhs({2, 1, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor rhs({1, 4, 1}, {10, 20, 30, 40});
+
+    auto difference = lhs - rhs;
+    require_shape(difference, {2, 4, 3});
+    require_data(difference, {
+        -9, -8, -7, -19, -18, -17, -29, -28, -27, -39, -38, -37,
+        -6, -5, -4, -16, -15, -14, -26, -25, -24, -36, -35, -34
+    });
+
+    auto product = lhs * rhs;
+    require_shape(product, {2, 4, 3});
+    require_data(product, {
+        10, 20, 30, 20, 40, 60, 30, 60, 90, 40, 80, 120,
+        40, 50, 60, 80, 100, 120, 120, 150, 180, 160, 200, 240
+    });
+
+    auto quotient = lhs / rhs;
+    require_shape(quotient, {2, 4, 3});
+    require_data(quotient, {
+        0.1f, 0.2f, 0.3f, 0.05f, 0.1f, 0.15f, 0.0333333f, 0.0666667f, 0.1f, 0.025f, 0.05f, 0.075f,
+        0.4f, 0.5f, 0.6f, 0.2f, 0.25f, 0.3f, 0.1333333f, 0.1666667f, 0.2f, 0.1f, 0.125f, 0.15f
+    });
+}
+
+TEST_CASE("binary ops reject incompatible broadcast shapes consistently",
+          "[arithmetic][comparison][broadcast]") {
+    cpptensor::Tensor lhs({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor rhs({2, 2}, {7, 8, 9, 10});
+
+    REQUIRE_THROWS_WITH(lhs - rhs,
+                        Catch::Matchers::ContainsSubstring("Binary op operands with shapes [2, 3] and [2, 2] are not broadcastable"));
+    REQUIRE_THROWS_WITH((lhs == rhs),
+                        Catch::Matchers::ContainsSubstring("Binary op operands with shapes [2, 3] and [2, 2] are not broadcastable"));
+}
+
 TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gemv]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor x({3}, {1, 0, -1});
