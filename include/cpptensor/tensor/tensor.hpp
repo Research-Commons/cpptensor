@@ -71,10 +71,11 @@ class Tensor {
                DeviceType device = DeviceType::CPU);
 
         /**
-         * @brief Default constructor - creates empty tensor
+         * @brief Default constructor - creates an uninitialized tensor handle
          *
-         * Creates a tensor with null implementation pointer. Operations on
-         * default-constructed tensors are undefined until properly initialized.
+         * Creates a tensor with a null implementation pointer. Public API calls
+         * on a default-constructed tensor throw a std::runtime_error until the
+         * tensor is assigned a valid implementation.
          */
         Tensor() = default;
 
@@ -890,6 +891,16 @@ class Tensor {
         explicit Tensor(std::shared_ptr<TensorImpl> impl);
 
     private:
+        /**
+         * @brief Validate that the tensor has an implementation before use
+         *
+         * @param method Name of the Tensor API entry point being called
+         * @return Shared pointer to the validated implementation
+         * @throws std::runtime_error if this tensor is default-constructed /
+         *         uninitialized
+         */
+        std::shared_ptr<TensorImpl> require_impl(const char* method) const;
+
         /**
          * @brief Shared pointer to implementation (PIMPL pattern)
          *
