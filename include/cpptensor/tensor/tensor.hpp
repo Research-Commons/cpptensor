@@ -547,12 +547,12 @@ class Tensor {
          * Reduces the tensor by summing all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto total = A.sum();         // Global sum, shape [1]
+         * auto total = A.sum();         // Global sum, shape []
          * auto total2 = A.sum(true);    // Global sum with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -586,12 +586,12 @@ class Tensor {
          * Reduces the tensor by computing the mean of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto avg = A.mean();          // Global mean, shape [1]
+         * auto avg = A.mean();          // Global mean, shape []
          * auto avg2 = A.mean(true);     // Global mean with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -625,12 +625,12 @@ class Tensor {
          * Reduces the tensor by finding the maximum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto max_val = A.max();       // Global max, shape [1]
+         * auto max_val = A.max();       // Global max, shape []
          * auto max_val2 = A.max(true);  // Global max with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -664,12 +664,12 @@ class Tensor {
          * Reduces the tensor by finding the minimum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto min_val = A.min();       // Global min, shape [1]
+         * auto min_val = A.min();       // Global min, shape []
          * auto min_val2 = A.min(true);  // Global min with keepdim, shape [1, 1, 1]
          * ```
          */

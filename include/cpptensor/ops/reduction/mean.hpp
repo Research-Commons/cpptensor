@@ -20,7 +20,7 @@ namespace cpptensor {
      * ```cpp
      * Tensor A({2, 3, 4}, values);
      *
-     * // Mean of all elements -> scalar tensor with shape [1]
+     * // Mean of all elements -> scalar tensor with shape []
      * auto avg = mean(A);
      *
      * // Mean along dimension 1 -> shape [2, 4]

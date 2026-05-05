@@ -132,12 +132,12 @@
 **Usage:**
 ```cpp
 Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
-auto total = A.sum();        // [21]
+auto total = A.sum();        // scalar [] with value 21
 auto col_sum = A.sum(0);     // [5, 7, 9]
 auto row_sum = A.sum(1);     // [6, 15]
-auto avg = A.mean();         // [3.5]
-auto max_val = A.max();      // [6]
-auto min_val = A.min();      // [1]
+auto avg = A.mean();         // scalar [] with value 3.5
+auto max_val = A.max();      // scalar [] with value 6
+auto min_val = A.min();      // scalar [] with value 1
 ```
 
 ---
