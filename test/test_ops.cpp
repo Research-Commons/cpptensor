@@ -200,3 +200,18 @@ TEST_CASE("clone preserves the logical order of transposed views", "[tensor][clo
     require_shape(cloned, {2, 2});
     require_data(cloned, {1, 3, 2, 4});
 }
+
+TEST_CASE("contiguous copies non-contiguous view values from the logical offset",
+          "[tensor][contiguous][view]") {
+    cpptensor::Tensor base({4}, {0, 1, 2, 3});
+
+    auto stepped = base.slice(0, 1, 4, 2);
+    auto materialized = stepped.contiguous();
+
+    REQUIRE_FALSE(stepped.is_contiguous());
+    require_shape(materialized, {2});
+    require_data(materialized, {1, 3});
+
+    base.data()[1] = 99.0f;
+    require_data(materialized, {1, 3});
+}
