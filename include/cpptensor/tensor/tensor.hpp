@@ -198,7 +198,8 @@ class Tensor {
          * float* slice_ptr = parent.data().data() + (5 * 64 * 64);  // Batch 5
          * Tensor slice = Tensor::from_ptr({64, 64}, slice_ptr,
          *                                  parent.impl(), parent.device_type());
-         * // slice shares data with parent - modifying slice modifies parent
+         * // slice aliases the parent storage for zero-copy reads/internal kernels
+         * // Mutable data() access is intentionally rejected for pointer-backed views
          * ```
          */
         static Tensor from_ptr(const std::vector<size_t>& shape,
