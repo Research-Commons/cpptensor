@@ -2,6 +2,12 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "cpptensor/backend/cpu_backend.h"
+#include "cpptensor/backend/isa/isaDetect.hpp"
+#ifdef BUILD_AVX2
+#include "cpptensor/backend/isa/avx2.hpp"
+#endif
+#include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/comparison/eq.hpp"
 #include "cpptensor/ops/comparison/ge.hpp"
 #include "cpptensor/ops/comparison/gt.hpp"
@@ -11,9 +17,14 @@
 #include "cpptensor/ops/manipulation/stack.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
+#include "cpptensor/backend/backend_loader.hpp"
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
 
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <string>
 #include <vector>
 
 using Catch::Approx;
@@ -32,6 +43,54 @@ void require_data(const cpptensor::Tensor& tensor, const std::vector<float>& exp
 }
 
 } // namespace
+
+class ScopedCpuIsaOverride {
+public:
+    explicit ScopedCpuIsaOverride(const char* value) : had_previous_(std::getenv("CPPGRAD_CPU_ISA") != nullptr) {
+        if (had_previous_) {
+            previous_ = std::getenv("CPPGRAD_CPU_ISA");
+        }
+        set(value);
+    }
+
+    ~ScopedCpuIsaOverride() {
+        if (had_previous_) {
+            set(previous_.c_str());
+        } else {
+            unset();
+        }
+    }
+
+private:
+    static void set(const char* value) {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", value == nullptr ? "" : value);
+#else
+        if (value == nullptr) {
+            unset();
+        } else {
+            setenv("CPPGRAD_CPU_ISA", value, 1);
+        }
+#endif
+    }
+
+    static void unset() {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", "");
+#else
+        unsetenv("CPPGRAD_CPU_ISA");
+#endif
+    }
+
+    bool had_previous_;
+    std::string previous_;
+};
+
+void require_nan_data(const cpptensor::Tensor& tensor) {
+    for (float value : tensor.data()) {
+        REQUIRE(std::isnan(value));
+    }
+}
 
 TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][cat]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
@@ -129,10 +188,44 @@ TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gem
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
     cpptensor::Tensor t({2, 3}, {1, 2, 3, 4, 5, 6});
 
-    require_data(t.sum(), {21});
-    require_data(t.mean(), {3.5f});
-    require_data(t.max(), {6});
-    require_data(t.min(), {1});
+    auto global_sum = t.sum();
+    require_shape(global_sum, {});
+    REQUIRE(global_sum.ndim() == 0);
+    require_data(global_sum, {21});
+
+    auto global_mean = t.mean();
+    require_shape(global_mean, {});
+    REQUIRE(global_mean.ndim() == 0);
+    require_data(global_mean, {3.5f});
+
+    auto global_max = t.max();
+    require_shape(global_max, {});
+    REQUIRE(global_max.ndim() == 0);
+    require_data(global_max, {6});
+
+    auto global_min = t.min();
+    require_shape(global_min, {});
+    REQUIRE(global_min.ndim() == 0);
+    require_data(global_min, {1});
+
+    require_shape(t.sum(true), {1, 1});
+    require_data(t.sum(true), {21});
+    require_shape(t.mean(true), {1, 1});
+    require_data(t.mean(true), {3.5f});
+    require_shape(t.max(true), {1, 1});
+    require_data(t.max(true), {6});
+    require_shape(t.min(true), {1, 1});
+    require_data(t.min(true), {1});
+
+    cpptensor::Tensor v({3}, {1, 2, 3});
+    require_shape(v.sum(0), {});
+    require_data(v.sum(0), {6});
+    require_shape(v.mean(0), {});
+    require_data(v.mean(0), {2});
+    require_shape(v.max(0), {});
+    require_data(v.max(0), {3});
+    require_shape(v.min(0), {});
+    require_data(v.min(0), {1});
 
     require_shape(t.sum(0), {3});
     require_data(t.sum(0), {5, 7, 9});
@@ -175,6 +268,22 @@ TEST_CASE("contiguous honors raw-pointer-backed view offsets", "[tensor][contigu
     require_data(materialized, {1, 3});
 }
 
+TEST_CASE("pointer-backed views expose logical const data and reject mutable storage",
+          "[tensor][data][from_ptr]") {
+    cpptensor::Tensor owner({6}, {0, 1, 2, 3, 4, 5});
+    auto subrange = cpptensor::Tensor::from_ptr(
+        {4},
+        owner.data().data() + 1,
+        owner.impl(),
+        owner.device_type());
+
+    require_shape(subrange, {4});
+    require_data(subrange, {1, 2, 3, 4});
+    REQUIRE_THROWS_WITH(
+        subrange.data(),
+        Catch::Matchers::ContainsSubstring("pointer-backed views"));
+}
+
 TEST_CASE("clone deep-copies sliced views using the logical view contents", "[tensor][clone][view]") {
     cpptensor::Tensor base({4}, {0, 1, 2, 3});
 
@@ -212,3 +321,55 @@ TEST_CASE("contiguous copies non-contiguous view values from the logical offset"
     base.data()[1] = 99.0f;
     require_data(materialized, {1, 3});
 }
+
+
+TEST_CASE("pow preserves real-domain results for negative bases", "[arithmetic][pow]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
+    cpptensor::Tensor even_exp({9}, {2, 2, 2, 2, 2, 2, 2, 2, 2});
+    cpptensor::Tensor odd_exp({9}, {3, 3, 3, 3, 3, 3, 3, 3, 3});
+    cpptensor::Tensor frac_exp({9}, {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f});
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_data(cpptensor::pow(base, even_exp), {1, 4, 9, 16, 25, 36, 49, 64, 81});
+        require_data(cpptensor::pow(base, odd_exp), {-1, -8, -27, -64, -125, -216, -343, -512, -729});
+        require_nan_data(cpptensor::pow(base, frac_exp));
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_data(cpptensor::pow(base, even_exp), {1, 4, 9, 16, 25, 36, 49, 64, 81});
+        require_data(cpptensor::pow(base, odd_exp), {-1, -8, -27, -64, -125, -216, -343, -512, -729});
+        require_nan_data(cpptensor::pow(base, frac_exp));
+    }
+#endif
+}
+
+#ifdef BUILD_AVX2
+TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[arithmetic][pow][avx2]") {
+    if (!cpptensor::has_avx2()) {
+        SUCCEED("Host CPU does not support AVX2");
+        return;
+    }
+
+    cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
+    cpptensor::Tensor exponents({9}, {2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
+    cpptensor::Tensor out = cpptensor::Tensor::full({9}, 0.0f);
+
+    cpptensor::AVX2::pow_f32_avx2(base, exponents, out);
+
+    REQUIRE(out.data()[0] == Approx(1.0f));
+    REQUIRE(out.data()[1] == Approx(-8.0f));
+    REQUIRE(out.data()[2] == Approx(9.0f));
+    REQUIRE(out.data()[3] == Approx(-64.0f));
+    REQUIRE(std::isnan(out.data()[4]));
+    REQUIRE(out.data()[5] == Approx(36.0f));
+    REQUIRE(out.data()[6] == Approx(-343.0f));
+    REQUIRE(std::isnan(out.data()[7]));
+    REQUIRE(out.data()[8] == Approx(81.0f));
+}
+#endif
+

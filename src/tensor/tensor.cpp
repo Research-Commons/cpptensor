@@ -116,10 +116,22 @@ namespace cpptensor {
     }
 
     // ---------- Shape & Info ----------
-    std::vector<size_t> Tensor::shape() const { return require_impl(__func__)->shape(); }
-    size_t Tensor::numel() const { return require_impl(__func__)->numel(); }
-    size_t Tensor::ndim() const { return require_impl(__func__)->shape().size(); }
-    DeviceType Tensor::device_type() const { return require_impl(__func__)->device(); }
+    std::vector<size_t> Tensor::shape() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).shape();
+    }
+    size_t Tensor::numel() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).numel();
+    }
+    size_t Tensor::ndim() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).shape().size();
+    }
+    DeviceType Tensor::device_type() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).device();
+    }
 
 
     void Tensor::print() const {
@@ -196,9 +208,15 @@ namespace cpptensor {
     }
 
     // Data access
-    const std::vector<float>& Tensor::data() const { return require_impl(__func__)->data(); }
+    const std::vector<float>& Tensor::data() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).data();
+    }
     std::vector<float>& Tensor::data() { return require_impl(__func__)->data(); }
-    const std::vector<size_t>& Tensor::stride() const { return require_impl(__func__)->stride(); }
+    const std::vector<size_t>& Tensor::stride() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).stride();
+    }
     std::vector<size_t>& Tensor::stride(){ return require_impl(__func__)->stride(); }
     std::shared_ptr<TensorImpl> Tensor::impl() const { return require_impl(__func__); }
 
@@ -508,11 +526,10 @@ namespace cpptensor {
 
     Tensor Tensor::contiguous() const {
         const auto impl = require_impl(__func__);
-        if (is_contiguous()) {
-            return *this;  // Already contiguous, return shallow copy
+        if (impl->can_expose_direct_data_buffer()) {
+            return *this;  // Already backed by a direct compact buffer
         }
 
-        // Need to actually copy and reorder data
         return Tensor(shape(), copy_logical_data(*this), device_type());
     }
 

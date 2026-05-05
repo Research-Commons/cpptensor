@@ -1,4 +1,5 @@
 #include "cpptensor/backend/cpu_backend.h"
+#include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
 #include <limits>
 #include <experimental/simd>
@@ -228,15 +229,7 @@ void cpptensor::CPU::powKernel(const Tensor& A, const Tensor& B, Tensor& Out) {
     const std::int64_t n = static_cast<std::int64_t>(Out.numel());
 
     for (std::int64_t i = 0; i < n; ++i) {
-        float base = a_data[i];
-        float exp  = b_data[i];
-
-        if (base < 0.0f) {
-            // NaN for non-integer powers of negative numbers
-            out_data[i] = std::numeric_limits<float>::quiet_NaN();
-        } else {
-            out_data[i] = std::pow(base, exp);
-        }
+        out_data[i] = detail::real_pow(a_data[i], b_data[i]);
     }
 }
 

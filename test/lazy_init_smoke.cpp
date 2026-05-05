@@ -32,7 +32,7 @@ int main() {
         }
 
         const auto total = added.sum();
-        if (total.shape() != std::vector<size_t>{1}) {
+        if (total.shape() != std::vector<size_t>{}) {
             std::cerr << "unexpected sum shape\n";
             return EXIT_FAILURE;
         }

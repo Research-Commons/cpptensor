@@ -8,6 +8,7 @@
 namespace cpptensor {
 
     class Function; // forward declaration for autograd support
+    class Tensor;
 
     /**
      * @class TensorImpl
@@ -48,6 +49,8 @@ namespace cpptensor {
      *       interact with Tensor class instead.
      */
     class TensorImpl {
+        friend class Tensor;
+
     public:
         // =============== Constructors ===============
 
@@ -133,26 +136,29 @@ namespace cpptensor {
         // =============== Data Accessors ===============
 
         /**
-         * @brief Get const reference to raw data buffer
+         * @brief Get const reference to flattened logical tensor contents
          *
-         * Returns the underlying flattened data vector in row-major order.
+         * Returns the tensor values in logical row-major order. Owning tensors
+         * and full contiguous views expose their backing storage directly.
+         * Non-trivial views (for example slices, permutations, transposes, or
+         * pointer-backed views) materialize a compact row-major snapshot.
          *
-         * @return Const reference to data vector
-         *
-         * @note Direct access to raw data. Useful for interfacing with
-         *       external libraries (BLAS, LAPACK, etc.)
+         * @return Const reference to flattened logical contents
          */
         const std::vector<float>& data() const;
 
         /**
-         * @brief Get mutable reference to raw data buffer
+         * @brief Get mutable reference to direct backing storage
          *
-         * Allows direct modification of underlying data. Use with caution
-         * as it bypasses tensor abstraction and autograd tracking.
+         * Allows direct modification only when the tensor is backed by a
+         * single contiguous storage vector whose logical contents exactly
+         * match the exposed buffer.
          *
-         * @return Mutable reference to data vector
+         * @return Mutable reference to backing data vector
          *
-         * @warning Modifying data directly breaks autograd computation graph
+         * @warning Throws for sliced, permuted, transposed, or pointer-backed
+         *          views. Call contiguous() or clone() first if you need a
+         *          mutable compact buffer.
          */
         std::vector<float>& data();
 
@@ -289,9 +295,24 @@ namespace cpptensor {
 
     private:
         /**
+         * @brief Check whether data() can expose direct mutable storage
+         */
+        bool can_expose_direct_data_buffer() const;
+
+        /**
+         * @brief Materialize logical row-major contents into a compact buffer
+         */
+        void materialize_logical_data(std::vector<float>& out) const;
+
+        /**
          * @brief Raw data buffer in row-major order
          */
         std::vector<float> data_;
+
+        /**
+         * @brief Cached compact logical contents for const data() on views
+         */
+        mutable std::vector<float> logical_data_cache_;
 
         /**
          * @brief Base tensor for views (keeps base alive)

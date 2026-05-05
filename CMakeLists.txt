@@ -1,35 +1,122 @@
 cmake_minimum_required(VERSION 3.20)
 
-# ==== Options ====
-# Build AVX objects (compile-time flags). Turn off if compiler can't support or you want smaller binary.
-option(BUILD_AVX2  "Build AVX2 optimized kernels (object library)"  ON)
-option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" ON)
+# ==== User Options ====
 option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 option(USE_OPENBLAS "Use OpenBLAS if found on this system" ON)
 
-#Failsafe for mac users
-if(APPLE)
-    if(BUILD_AVX2 OR BUILD_AVX512)
-        message(WARNING "AVX2/AVX512 not supported on Apple Silicon. Forcing them OFF.")
-        set(BUILD_AVX2 OFF CACHE BOOL "" FORCE)
-        set(BUILD_AVX512 OFF CACHE BOOL "" FORCE)
-    endif()
-    if(BUILD_CUDA)
-        message(WARNING "NO CUDA ON MAC :/ . Forcing them OFF.")
-        set(BUILD_CUDA OFF CACHE BOOL "" FORCE)
-    endif ()
-endif()
+project(cpptensor LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
 
 if(BUILD_CUDA)
-    project(cpptensor LANGUAGES CXX CUDA)
-    set(CMAKE_CXX_STANDARD 26)
-    set(CMAKE_CUDA_STANDARD 17)
-    message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
-else()
-    project(cpptensor LANGUAGES CXX)
-    set(CMAKE_CXX_STANDARD 26)
-    message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
+    if(APPLE)
+        message(WARNING "CUDA is not supported in this build on Apple platforms. Forcing BUILD_CUDA OFF.")
+        set(BUILD_CUDA OFF CACHE BOOL "Use CUDA kernels" FORCE)
+    else()
+        enable_language(CUDA)
+        set(CMAKE_CUDA_STANDARD 17)
+    endif()
+endif()
+
+include(CheckCXXSourceCompiles)
+
+function(cpptensor_check_source_compiles required_flags source out_var)
+    set(_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+    set(CMAKE_REQUIRED_FLAGS "${required_flags}")
+    check_cxx_source_compiles("${source}" ${out_var})
+    set(CMAKE_REQUIRED_FLAGS "${_saved_required_flags}")
+    set(${out_var} "${${out_var}}" PARENT_SCOPE)
+endfunction()
+
+set(CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(DEFINED CPPTENSOR_SYSTEM_PROCESSOR_OVERRIDE AND NOT CPPTENSOR_SYSTEM_PROCESSOR_OVERRIDE STREQUAL "")
+    set(CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR "${CPPTENSOR_SYSTEM_PROCESSOR_OVERRIDE}")
+endif()
+
+string(TOLOWER "${CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR}" CPPTENSOR_SYSTEM_PROCESSOR_LOWER)
+set(CPPTENSOR_TARGET_IS_X86 FALSE)
+if(CPPTENSOR_SYSTEM_PROCESSOR_LOWER MATCHES "^(x86_64|x86_64h|amd64|x64|i[3-6]86|x86)$")
+    set(CPPTENSOR_TARGET_IS_X86 TRUE)
+endif()
+
+set(CPPTENSOR_AVX2_SUPPORTED FALSE)
+set(CPPTENSOR_AVX512_SUPPORTED FALSE)
+set(CPPTENSOR_AVX2_UNSUPPORTED_REASON "target architecture '${CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR}' is not x86/x86_64")
+set(CPPTENSOR_AVX512_UNSUPPORTED_REASON "target architecture '${CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR}' is not x86/x86_64")
+set(CPPTENSOR_AVX2_COMPILE_FLAGS "")
+set(CPPTENSOR_AVX512_COMPILE_FLAGS "")
+set(CPPTENSOR_AVX2_REQUIRED_FLAGS "")
+set(CPPTENSOR_AVX512_REQUIRED_FLAGS "")
+
+if(CPPTENSOR_TARGET_IS_X86)
+    if(MSVC)
+        set(CPPTENSOR_AVX2_COMPILE_FLAGS /arch:AVX2)
+        set(CPPTENSOR_AVX512_COMPILE_FLAGS /arch:AVX512)
+    else()
+        set(CPPTENSOR_AVX2_COMPILE_FLAGS -mavx2 -mfma)
+        set(CPPTENSOR_AVX512_COMPILE_FLAGS -mavx512f -mavx512dq -mavx512bw -mavx512vl -mfma)
+    endif()
+
+    string(JOIN " " CPPTENSOR_AVX2_REQUIRED_FLAGS ${CPPTENSOR_AVX2_COMPILE_FLAGS})
+    string(JOIN " " CPPTENSOR_AVX512_REQUIRED_FLAGS ${CPPTENSOR_AVX512_COMPILE_FLAGS})
+
+    cpptensor_check_source_compiles(
+        "${CPPTENSOR_AVX2_REQUIRED_FLAGS}"
+        "#include <immintrin.h>\nint main() { __m256 a = _mm256_set1_ps(1.0f); __m256 b = _mm256_fmadd_ps(a, a, a); return static_cast<int>(_mm256_cvtss_f32(b)); }"
+        CPPTENSOR_COMPILER_SUPPORTS_AVX2)
+    if(CPPTENSOR_COMPILER_SUPPORTS_AVX2)
+        set(CPPTENSOR_AVX2_SUPPORTED TRUE)
+        set(CPPTENSOR_AVX2_UNSUPPORTED_REASON "")
+    else()
+        set(CPPTENSOR_AVX2_UNSUPPORTED_REASON "compiler '${CMAKE_CXX_COMPILER_ID}' rejected AVX2/FMA flags '${CPPTENSOR_AVX2_REQUIRED_FLAGS}'")
+    endif()
+
+    cpptensor_check_source_compiles(
+        "${CPPTENSOR_AVX512_REQUIRED_FLAGS}"
+        "#include <immintrin.h>\nalignas(64) float out[16];\nint main() { __m512 a = _mm512_set1_ps(1.0f); __m512 b = _mm512_fmadd_ps(a, a, a); _mm512_store_ps(out, b); return static_cast<int>(out[0]); }"
+        CPPTENSOR_COMPILER_SUPPORTS_AVX512)
+    if(CPPTENSOR_COMPILER_SUPPORTS_AVX512)
+        set(CPPTENSOR_AVX512_SUPPORTED TRUE)
+        set(CPPTENSOR_AVX512_UNSUPPORTED_REASON "")
+    else()
+        set(CPPTENSOR_AVX512_UNSUPPORTED_REASON "compiler '${CMAKE_CXX_COMPILER_ID}' rejected AVX-512/FMA flags '${CPPTENSOR_AVX512_REQUIRED_FLAGS}'")
+    endif()
+endif()
+
+set(CPPTENSOR_BUILD_AVX2_DEFAULT OFF)
+if(CPPTENSOR_AVX2_SUPPORTED)
+    set(CPPTENSOR_BUILD_AVX2_DEFAULT ON)
+endif()
+option(BUILD_AVX2 "Build AVX2 optimized kernels (object library)" ${CPPTENSOR_BUILD_AVX2_DEFAULT})
+
+set(CPPTENSOR_BUILD_AVX512_DEFAULT OFF)
+if(CPPTENSOR_AVX512_SUPPORTED)
+    set(CPPTENSOR_BUILD_AVX512_DEFAULT ON)
+endif()
+option(BUILD_AVX512 "Build AVX-512 optimized kernels (object library)" ${CPPTENSOR_BUILD_AVX512_DEFAULT})
+
+set(CPPTENSOR_ENABLE_AVX2 ${BUILD_AVX2})
+if(BUILD_AVX2 AND NOT CPPTENSOR_AVX2_SUPPORTED)
+    message(FATAL_ERROR "BUILD_AVX2=ON requested, but AVX2 kernels are unavailable: ${CPPTENSOR_AVX2_UNSUPPORTED_REASON}")
+endif()
+
+set(CPPTENSOR_ENABLE_AVX512 ${BUILD_AVX512})
+if(BUILD_AVX512 AND NOT CPPTENSOR_AVX512_SUPPORTED)
+    message(FATAL_ERROR "BUILD_AVX512=ON requested, but AVX-512 kernels are unavailable: ${CPPTENSOR_AVX512_UNSUPPORTED_REASON}")
+endif()
+
+message(STATUS "Target processor: ${CPPTENSOR_EFFECTIVE_SYSTEM_PROCESSOR}")
+message(STATUS "AVX2 kernels: requested=${BUILD_AVX2}, enabled=${CPPTENSOR_ENABLE_AVX2}")
+if(NOT CPPTENSOR_AVX2_SUPPORTED)
+    message(STATUS "AVX2 unavailable: ${CPPTENSOR_AVX2_UNSUPPORTED_REASON}")
+endif()
+message(STATUS "AVX-512 kernels: requested=${BUILD_AVX512}, enabled=${CPPTENSOR_ENABLE_AVX512}")
+if(NOT CPPTENSOR_AVX512_SUPPORTED)
+    message(STATUS "AVX-512 unavailable: ${CPPTENSOR_AVX512_UNSUPPORTED_REASON}")
 endif()
 
 # Enable debug info and frame pointers (needed for accurate profiling)
@@ -77,11 +164,8 @@ endif()
 
 set(ALL_SRC ${ALL_CPP} ${ALL_CUDA})
 
-# remove ISA path files from ALL_SRC so they are compiled separately with special flags
-#list(FILTER ALL_SRC EXCLUDE REGEX ".*/src/backend/isa/.*")
-
 # ==== Explicitly exclude ISA source files from generic compilation ====
-# (We will add them separately as object libraries based on BUILD_AVX2 / BUILD_AVX512)
+# (We will add them separately as object libraries based on the effective ISA configuration)
 list(FILTER ALL_SRC EXCLUDE REGEX ".*/backend/isa/avx2.*\\.cpp$")
 list(FILTER ALL_SRC EXCLUDE REGEX ".*/backend/isa/avx512.*\\.cpp$")
 
@@ -89,28 +173,15 @@ file(GLOB AVX2_SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/backend/isa/*avx2.c
 file(GLOB AVX512_SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/backend/isa/*avx512.cpp)
 
 # ==== Create object libraries for ISA specializations ====
-if(BUILD_AVX2 AND AVX2_SRC)
+if(CPPTENSOR_ENABLE_AVX2 AND AVX2_SRC)
     add_library(cpptensor_isa_avx2 OBJECT ${AVX2_SRC})
-    if(MSVC)
-        target_compile_options(cpptensor_isa_avx2 PRIVATE /arch:AVX2)
-    elseif(NOT APPLE)
-        target_compile_options(cpptensor_isa_avx2 PRIVATE -mavx2 -mfma -O3)
-    else()
-        message(STATUS "Skipping AVX2 flags on macOS (unsupported)")
-    endif()
+    target_compile_options(cpptensor_isa_avx2 PRIVATE ${CPPTENSOR_AVX2_COMPILE_FLAGS} -O3)
     target_include_directories(cpptensor_isa_avx2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 endif()
 
-if(BUILD_AVX512 AND AVX512_SRC)
+if(CPPTENSOR_ENABLE_AVX512 AND AVX512_SRC)
     add_library(cpptensor_isa_avx512 OBJECT ${AVX512_SRC})
-    if(MSVC)
-        # MSVC's AVX-512 support varies by version/toolset. Use with caution.
-        target_compile_options(cpptensor_isa_avx512 PRIVATE /arch:AVX512)
-    elseif(NOT APPLE)
-        target_compile_options(cpptensor_isa_avx512 PRIVATE -mavx512f -mavx512dq -mavx512bw -mavx512vl -mfma -O3)
-    else()
-        message(STATUS "Skipping AVX-512 flags on macOS (unsupported)")
-    endif()
+    target_compile_options(cpptensor_isa_avx512 PRIVATE ${CPPTENSOR_AVX512_COMPILE_FLAGS} -O3)
     target_include_directories(cpptensor_isa_avx512 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 endif()
 
@@ -118,10 +189,10 @@ endif()
 set(cpptensor_OBJ_SOURCES ${ALL_SRC})
 
 # Construct the add_library call with OBJECTS expanded if they exist
-if(BUILD_AVX2 AND AVX2_SRC)
+if(CPPTENSOR_ENABLE_AVX2 AND AVX2_SRC)
     list(APPEND cpptensor_OBJ_SOURCES $<TARGET_OBJECTS:cpptensor_isa_avx2>)
 endif()
-if(BUILD_AVX512 AND AVX512_SRC)
+if(CPPTENSOR_ENABLE_AVX512 AND AVX512_SRC)
     list(APPEND cpptensor_OBJ_SOURCES $<TARGET_OBJECTS:cpptensor_isa_avx512>)
 endif()
 
@@ -137,8 +208,8 @@ endif()
 
 # ==== Pass build options as compiler definitions ====
 target_compile_definitions(cpptensor PUBLIC
-        $<$<BOOL:${BUILD_AVX2}>:BUILD_AVX2>
-        $<$<BOOL:${BUILD_AVX512}>:BUILD_AVX512>
+        $<$<BOOL:${CPPTENSOR_ENABLE_AVX2}>:BUILD_AVX2>
+        $<$<BOOL:${CPPTENSOR_ENABLE_AVX512}>:BUILD_AVX512>
         $<$<BOOL:${BUILD_CUDA}>:BUILD_CUDA>
         $<$<BOOL:${HAVE_OPENBLAS}>:USE_OPENBLAS>
         #$<$<BOOL:${USE_STD_SIMD}>:USE_STD_SIMD>
@@ -151,7 +222,7 @@ set_target_properties(cpptensor PROPERTIES
 # ==== Include Directories ====
 target_include_directories(cpptensor
         PUBLIC  ${CMAKE_SOURCE_DIR}/include            # Enables: #include "cpptensor/tensor/..."
-        PRIVATE ${CMAKE_SOURCE_DIR}/include/cpptensor    # Enables: #include "tensor/..."
+        PRIVATE ${CMAKE_SOURCE_DIR}/include/cpptensor  # Enables: #include "tensor/..."
 )
 
 ## ==== Link Cuda Backend ====
