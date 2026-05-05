@@ -2,6 +2,12 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "cpptensor/backend/cpu_backend.h"
+#include "cpptensor/backend/isa/isaDetect.hpp"
+#ifdef BUILD_AVX2
+#include "cpptensor/backend/isa/avx2.hpp"
+#endif
+#include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/comparison/eq.hpp"
 #include "cpptensor/ops/comparison/ge.hpp"
 #include "cpptensor/ops/comparison/gt.hpp"
@@ -15,6 +21,10 @@
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
 
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <string>
 #include <vector>
 
 using Catch::Approx;
@@ -33,6 +43,54 @@ void require_data(const cpptensor::Tensor& tensor, const std::vector<float>& exp
 }
 
 } // namespace
+
+class ScopedCpuIsaOverride {
+public:
+    explicit ScopedCpuIsaOverride(const char* value) : had_previous_(std::getenv("CPPGRAD_CPU_ISA") != nullptr) {
+        if (had_previous_) {
+            previous_ = std::getenv("CPPGRAD_CPU_ISA");
+        }
+        set(value);
+    }
+
+    ~ScopedCpuIsaOverride() {
+        if (had_previous_) {
+            set(previous_.c_str());
+        } else {
+            unset();
+        }
+    }
+
+private:
+    static void set(const char* value) {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", value == nullptr ? "" : value);
+#else
+        if (value == nullptr) {
+            unset();
+        } else {
+            setenv("CPPGRAD_CPU_ISA", value, 1);
+        }
+#endif
+    }
+
+    static void unset() {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", "");
+#else
+        unsetenv("CPPGRAD_CPU_ISA");
+#endif
+    }
+
+    bool had_previous_;
+    std::string previous_;
+};
+
+void require_nan_data(const cpptensor::Tensor& tensor) {
+    for (float value : tensor.data()) {
+        REQUIRE(std::isnan(value));
+    }
+}
 
 TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][cat]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
@@ -265,3 +323,55 @@ TEST_CASE("contiguous copies non-contiguous view values from the logical offset"
     base.data()[1] = 99.0f;
     require_data(materialized, {1, 3});
 }
+
+
+TEST_CASE("pow preserves real-domain results for negative bases", "[arithmetic][pow]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
+    cpptensor::Tensor even_exp({9}, {2, 2, 2, 2, 2, 2, 2, 2, 2});
+    cpptensor::Tensor odd_exp({9}, {3, 3, 3, 3, 3, 3, 3, 3, 3});
+    cpptensor::Tensor frac_exp({9}, {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f});
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_data(cpptensor::pow(base, even_exp), {1, 4, 9, 16, 25, 36, 49, 64, 81});
+        require_data(cpptensor::pow(base, odd_exp), {-1, -8, -27, -64, -125, -216, -343, -512, -729});
+        require_nan_data(cpptensor::pow(base, frac_exp));
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_data(cpptensor::pow(base, even_exp), {1, 4, 9, 16, 25, 36, 49, 64, 81});
+        require_data(cpptensor::pow(base, odd_exp), {-1, -8, -27, -64, -125, -216, -343, -512, -729});
+        require_nan_data(cpptensor::pow(base, frac_exp));
+    }
+#endif
+}
+
+#ifdef BUILD_AVX2
+TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[arithmetic][pow][avx2]") {
+    if (!cpptensor::has_avx2()) {
+        SUCCEED("Host CPU does not support AVX2");
+        return;
+    }
+
+    cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
+    cpptensor::Tensor exponents({9}, {2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
+    cpptensor::Tensor out = cpptensor::Tensor::full({9}, 0.0f);
+
+    cpptensor::AVX2::pow_f32_avx2(base, exponents, out);
+
+    REQUIRE(out.data()[0] == Approx(1.0f));
+    REQUIRE(out.data()[1] == Approx(-8.0f));
+    REQUIRE(out.data()[2] == Approx(9.0f));
+    REQUIRE(out.data()[3] == Approx(-64.0f));
+    REQUIRE(std::isnan(out.data()[4]));
+    REQUIRE(out.data()[5] == Approx(36.0f));
+    REQUIRE(out.data()[6] == Approx(-343.0f));
+    REQUIRE(std::isnan(out.data()[7]));
+    REQUIRE(out.data()[8] == Approx(81.0f));
+}
+#endif
+

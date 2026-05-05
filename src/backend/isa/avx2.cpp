@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
 
@@ -381,22 +382,23 @@ namespace cpptensor {
         for (; i + stride <= n; i += stride) {
             __m256 va = _mm256_loadu_ps(a + i);
             __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 negative_mask = _mm256_cmp_ps(va, _mm256_setzero_ps(), _CMP_LT_OQ);
+            int negative_lanes = _mm256_movemask_ps(negative_mask);
 
-            // log(a)
-            __m256 v_log = log256_ps(va);
-
-            // b * log(a)
-            __m256 v_mul = _mm256_mul_ps(vb, v_log);
-
-            // exp(b * log(a))
-            __m256 v_pow = exp256_ps(v_mul);
-
+            __m256 v_pow = exp256_ps(_mm256_mul_ps(vb, log256_ps(va)));
             _mm256_storeu_ps(o + i, v_pow);
+
+            if (negative_lanes != 0) {
+                for (int lane = 0; lane < stride; ++lane) {
+                    if ((negative_lanes & (1 << lane)) != 0) {
+                        o[i + lane] = detail::real_pow(a[i + lane], b[i + lane]);
+                    }
+                }
+            }
         }
 
-        // rem
         for (; i < n; ++i) {
-            o[i] = std::pow(a[i], b[i]);
+            o[i] = detail::real_pow(a[i], b[i]);
         }
     }
 
