@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 #include <utility>
 
 namespace cpptensor {
@@ -29,6 +30,14 @@ namespace cpptensor {
     Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
         : impl_(std::move(impl))
     {}
+
+    std::shared_ptr<TensorImpl> Tensor::require_impl(const char* method) const {
+        if (!impl_) {
+            throw std::runtime_error(std::string("Tensor::") + method +
+                                     ": tensor is uninitialized; default-constructed tensors must be assigned before use");
+        }
+        return impl_;
+    }
 
     // ---------- Factories ----------
     Tensor Tensor::zeros(const std::vector<size_t>& shape,
@@ -67,14 +76,15 @@ namespace cpptensor {
     }
 
     // ---------- Shape & Info ----------
-    std::vector<size_t> Tensor::shape() const { return impl_->shape(); }
-    size_t Tensor::numel() const { return impl_->numel(); }
-    size_t Tensor::ndim() const { return impl_->shape().size(); }
-    DeviceType Tensor::device_type() const { return impl_->device(); }
+    std::vector<size_t> Tensor::shape() const { return require_impl(__func__)->shape(); }
+    size_t Tensor::numel() const { return require_impl(__func__)->numel(); }
+    size_t Tensor::ndim() const { return require_impl(__func__)->shape().size(); }
+    DeviceType Tensor::device_type() const { return require_impl(__func__)->device(); }
 
 
     void Tensor::print() const {
-        const auto &s = impl_->shape();
+        const auto impl = require_impl(__func__);
+        const auto &s = impl->shape();
         std::cout << "Tensor(shape=[";
         for (size_t i = 0; i < s.size(); ++i) {
             if (i) std::cout << ", ";
@@ -83,8 +93,8 @@ namespace cpptensor {
         std::cout << "], values=[";
 
         // Use stride-aware access for views/sliced tensors
-        const auto &strides = impl_->stride();
-        const float* data_ptr = impl_->data_ptr();
+        const auto &strides = impl->stride();
+        const float* data_ptr = impl->data_ptr();
         size_t total_elements = numel();
 
         // Helper to convert flat index to multi-dimensional indices
@@ -118,9 +128,10 @@ namespace cpptensor {
 
     void Tensor::print_pretty() const {
         // small pretty printer: only for 1D or 2D tensors
-        const auto &s = impl_->shape();
-        const auto &strides = impl_->stride();
-        const float* data_ptr = impl_->data_ptr();
+        const auto impl = require_impl(__func__);
+        const auto &s = impl->shape();
+        const auto &strides = impl->stride();
+        const float* data_ptr = impl->data_ptr();
 
         if (s.size() == 1) {
             std::cout << "[";
@@ -145,15 +156,16 @@ namespace cpptensor {
     }
 
     // Data access
-    const std::vector<float>& Tensor::data() const { return impl_->data(); }
-    std::vector<float>& Tensor::data() { return impl_->data(); }
-    const std::vector<size_t>& Tensor::stride() const { return impl_->stride(); }
-    std::vector<size_t>& Tensor::stride(){ return impl_->stride(); }
-    std::shared_ptr<TensorImpl> Tensor::impl() const { return impl_; }
+    const std::vector<float>& Tensor::data() const { return require_impl(__func__)->data(); }
+    std::vector<float>& Tensor::data() { return require_impl(__func__)->data(); }
+    const std::vector<size_t>& Tensor::stride() const { return require_impl(__func__)->stride(); }
+    std::vector<size_t>& Tensor::stride(){ return require_impl(__func__)->stride(); }
+    std::shared_ptr<TensorImpl> Tensor::impl() const { return require_impl(__func__); }
 
     // =============== Tensor Manipulation Operations ===============
 
     Tensor Tensor::view(const std::vector<size_t>& new_shape) const {
+        const auto impl = require_impl(__func__);
         // Validate total elements match
         size_t new_numel = 1;
         for (auto s : new_shape) new_numel *= s;
@@ -170,7 +182,7 @@ namespace cpptensor {
         }
 
         // Create view TensorImpl that shares data with this tensor
-        auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape);
+        auto view_impl = std::make_shared<TensorImpl>(impl, new_shape);
 
         Tensor result;
         result.impl_ = view_impl;
@@ -178,6 +190,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::reshape(const std::vector<size_t>& new_shape) const {
+        require_impl(__func__);
         if (is_contiguous()) {
             return view(new_shape);  // Zero-copy if possible
         } else {
@@ -187,6 +200,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::flatten(int start_dim, int end_dim) const {
+        require_impl(__func__);
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
@@ -232,6 +246,7 @@ namespace cpptensor {
                          std::optional<int64_t> start,
                          std::optional<int64_t> end,
                          std::optional<int64_t> step) const {
+        const auto impl = require_impl(__func__);
         const int rank = static_cast<int>(ndim());
 
         // Normalize negative dimension
@@ -246,7 +261,7 @@ namespace cpptensor {
         }
 
         auto new_shape = shape();
-        const auto& base_stride = impl_->stride();
+        const auto& base_stride = impl->stride();
         std::vector<size_t> new_stride = base_stride;
 
         const int64_t dim_size = static_cast<int64_t>(new_shape[norm_dim]);
@@ -298,11 +313,12 @@ namespace cpptensor {
         }
 
         // Create view with modified shape, stride, and offset
-        auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride, offset_delta);
+        auto view_impl = std::make_shared<TensorImpl>(impl, new_shape, new_stride, offset_delta);
         return Tensor(std::move(view_impl));
     }
 
     Tensor Tensor::squeeze(int dim) const {
+        require_impl(__func__);
         auto sh = shape();
         std::vector<size_t> new_shape;
 
@@ -337,6 +353,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::unsqueeze(int dim) const {
+        require_impl(__func__);
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
@@ -362,6 +379,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::permute(const std::vector<int>& dims) const {
+        const auto impl = require_impl(__func__);
         auto old_shape = shape();
         auto old_stride = stride();
         int ndims = static_cast<int>(old_shape.size());
@@ -398,7 +416,7 @@ namespace cpptensor {
         }
 
         // Create view with modified shape and stride
-        auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride);
+        auto view_impl = std::make_shared<TensorImpl>(impl, new_shape, new_stride);
 
         Tensor result;
         result.impl_ = view_impl;
@@ -406,6 +424,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::transpose(int dim0, int dim1) const {
+        require_impl(__func__);
         int ndims = static_cast<int>(ndim());
 
         // Default: transpose last two dimensions for 2D case
@@ -432,6 +451,7 @@ namespace cpptensor {
     }
 
     bool Tensor::is_contiguous() const {
+        require_impl(__func__);
         auto sh = shape();
         auto st = stride();
 
@@ -447,6 +467,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::contiguous() const {
+        const auto impl = require_impl(__func__);
         if (is_contiguous()) {
             return *this;  // Already contiguous, return shallow copy
         }
@@ -459,7 +480,7 @@ namespace cpptensor {
 
         // Copy data in contiguous (row-major) order
         std::vector<size_t> indices(sh.size(), 0);
-        const float* src = impl_->data_ptr();
+        const float* src = impl->data_ptr();
 
         for (size_t i = 0; i < total; ++i) {
             // Compute offset in original tensor using strides
@@ -481,39 +502,47 @@ namespace cpptensor {
     }
 
     Tensor Tensor::clone() const {
+        const auto impl = require_impl(__func__);
         // Deep copy - create new data buffer
-        return Tensor(shape(), impl_->data(), device_type());
+        return Tensor(shape(), impl->data(), device_type());
     }
 
     // =============== Reduction Operations Implementation ===============
 
     // Global reduction overloads (no dim parameter)
     Tensor Tensor::sum(bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::sum(*this, std::nullopt, keepdim);
     }
 
     Tensor Tensor::mean(bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::mean(*this, std::nullopt, keepdim);
     }
 
     Tensor Tensor::max(bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::max(*this, -1, keepdim);
     }
 
     Tensor Tensor::min(bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::min(*this, -1, keepdim);
     }
 
     // Dimensional reduction overloads (with dim parameter)
     Tensor Tensor::sum(int dim, bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::sum(*this, std::optional<int>(dim), keepdim);
     }
 
     Tensor Tensor::mean(int dim, bool keepdim) const {
+        require_impl(__func__);
         return cpptensor::mean(*this, std::optional<int>(dim), keepdim);
     }
 
     Tensor Tensor::max(int dim, bool keepdim) const {
+        require_impl(__func__);
         int actual_dim = dim;
         if (actual_dim < 0) {
             actual_dim += static_cast<int>(ndim());
@@ -522,6 +551,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::min(int dim, bool keepdim) const {
+        require_impl(__func__);
         int actual_dim = dim;
         if (actual_dim < 0) {
             actual_dim += static_cast<int>(ndim());
