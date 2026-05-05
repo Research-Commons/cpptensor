@@ -70,7 +70,7 @@ namespace cpptensor {
         R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
         R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
 
-        // AVX2 Comparison operations (hybrid dispatch in comparison ops handles broadcasting)
+        // AVX2 Comparison operations (same-shape CPU comparisons route here via runtime ISA dispatch)
         R.registerKernel(OpType::Eq, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::eq_f32_avx2);
         R.registerKernel(OpType::Ne, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::ne_f32_avx2);
         R.registerKernel(OpType::Gt, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::gt_f32_avx2);

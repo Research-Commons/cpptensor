@@ -15,11 +15,52 @@
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
 
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 using Catch::Approx;
 
 namespace {
+
+class ScopedCpuIsaOverride {
+public:
+    explicit ScopedCpuIsaOverride(const char* value) {
+        if (const char* existing = std::getenv("CPPGRAD_CPU_ISA")) {
+            had_previous_ = true;
+            previous_ = existing;
+        }
+        set(value);
+    }
+
+    ~ScopedCpuIsaOverride() {
+        if (had_previous_) {
+            set(previous_.c_str());
+        } else {
+            clear();
+        }
+    }
+
+private:
+    static void set(const char* value) {
+#if defined(_WIN32)
+        _putenv_s("CPPGRAD_CPU_ISA", value);
+#else
+        setenv("CPPGRAD_CPU_ISA", value, 1);
+#endif
+    }
+
+    static void clear() {
+#if defined(_WIN32)
+        _putenv_s("CPPGRAD_CPU_ISA", "");
+#else
+        unsetenv("CPPGRAD_CPU_ISA");
+#endif
+    }
+
+    bool had_previous_ = false;
+    std::string previous_;
+};
 
 void require_shape(const cpptensor::Tensor& tensor, std::vector<size_t> expected) {
     REQUIRE(tensor.shape() == expected);
@@ -88,6 +129,8 @@ TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squ
 }
 
 TEST_CASE("comparison operators support tensor, scalar, and broadcast operands", "[comparison]") {
+    cpptensor::initialize_kernels();
+
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor b({2, 3}, {1, 0, 3, 10, 5, 0});
 
@@ -104,6 +147,22 @@ TEST_CASE("comparison operators support tensor, scalar, and broadcast operands",
     cpptensor::Tensor row({1, 3}, {1, 5, 10});
     require_shape(a < row, {2, 3});
     require_data(a < row, {0, 1, 1, 0, 0, 1});
+}
+
+TEST_CASE("comparison operators honor the runtime ISA override on same-shape CPU tensors",
+          "[comparison][dispatch]") {
+    cpptensor::initialize_kernels();
+    ScopedCpuIsaOverride force_generic("generic");
+
+    cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor b({2, 3}, {1, 0, 3, 10, 5, 0});
+
+    require_data(a == b, {1, 0, 1, 0, 1, 0});
+    require_data(a != b, {0, 1, 0, 1, 0, 1});
+    require_data(a > b, {0, 1, 0, 0, 0, 1});
+    require_data(a < b, {0, 0, 0, 1, 0, 0});
+    require_data(a >= b, {1, 1, 1, 0, 1, 1});
+    require_data(a <= b, {1, 0, 1, 1, 1, 0});
 }
 
 TEST_CASE("compute_broadcast_shape rejects incompatible dimensions and preserves valid broadcasts",
