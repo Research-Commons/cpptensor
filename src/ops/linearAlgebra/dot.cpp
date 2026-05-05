@@ -28,6 +28,9 @@ namespace cpptensor {
         Tensor Out = Tensor::full({}, 0.0f, A.device_type());
 
     #ifdef USE_OPENBLAS
+            Tensor A_blas = A.is_contiguous() ? A : A.contiguous();
+            Tensor B_blas = B.is_contiguous() ? B : B.contiguous();
+
             // ===== Use OpenBLAS SDOT =====
             //
             // SDOT computes the dot product of two vectors:
@@ -40,8 +43,8 @@ namespace cpptensor {
             // - y: pointer to second vector
             // - incy: stride within y (1 for contiguous)
 
-            const float* Adata = A.data().data();
-            const float* Bdata = B.data().data();
+            const float* Adata = A_blas.impl()->data_ptr();
+            const float* Bdata = B_blas.impl()->data_ptr();
 
             float result = cblas_sdot(
                 static_cast<int>(n),  // number of elements

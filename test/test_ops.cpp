@@ -12,6 +12,8 @@
 #include "cpptensor/ops/comparison/ge.hpp"
 #include "cpptensor/ops/comparison/gt.hpp"
 #include "cpptensor/ops/comparison/le.hpp"
+#include "cpptensor/ops/linearAlgebra/dot.hpp"
+#include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/comparison/lt.hpp"
 #include "cpptensor/ops/comparison/ne.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
@@ -183,6 +185,66 @@ TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gem
     auto y = cpptensor::matmul(a, x);
     require_shape(y, {2});
     require_data(y, {-2, -2});
+}
+
+TEST_CASE("linear algebra kernels honor logical tensor views", "[linear-algebra][views]") {
+    cpptensor::initialize_kernels();
+
+    SECTION("dot uses the sliced vector contents") {
+        cpptensor::Tensor lhs_base({3}, {0, 1, 2});
+        cpptensor::Tensor rhs_base({3}, {4, 5, 6});
+
+        auto lhs = lhs_base.slice(0, 1, 3);
+        auto rhs = rhs_base.slice(0, 1, 3);
+        auto result = cpptensor::dot(lhs, rhs);
+
+        require_shape(result, {});
+        require_data(result, {17});
+    }
+
+    SECTION("gemv and matmul respect row-sliced and transposed matrices") {
+        cpptensor::Tensor matrix({3, 2}, {1, 2, 3, 4, 5, 6});
+        cpptensor::Tensor vector({2}, {7, 8});
+
+        auto row_slice = matrix.slice(0, 1, 3);
+        require_data(cpptensor::gemv(row_slice, vector), {53, 83});
+        require_data(cpptensor::matmul(row_slice, vector), {53, 83});
+
+        cpptensor::Tensor base({2, 3}, {1, 2, 3, 4, 5, 6});
+        auto transposed = base.transpose();
+        require_data(cpptensor::gemv(transposed, vector), {39, 54, 69});
+    }
+
+    SECTION("gemm and matmul respect transposed matrix views") {
+        cpptensor::Tensor lhs_base({2, 3}, {1, 2, 3, 4, 5, 6});
+        cpptensor::Tensor rhs({2, 2}, {7, 8, 9, 10});
+
+        auto lhs = lhs_base.transpose();
+        require_data(cpptensor::gemm(lhs, rhs), {43, 48, 59, 66, 75, 84});
+        require_data(cpptensor::matmul(lhs, rhs), {43, 48, 59, 66, 75, 84});
+    }
+
+    SECTION("batched matmul materializes non-contiguous batch matrices logically") {
+        cpptensor::Tensor lhs_base({2, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8});
+        cpptensor::Tensor rhs({2, 2, 2}, {1, 0, 0, 1, 1, 0, 0, 1});
+
+        auto lhs = lhs_base.transpose(1, 2);
+        auto result = cpptensor::matmul(lhs, rhs);
+
+        require_shape(result, {2, 2, 2});
+        require_data(result, {1, 3, 2, 4, 5, 7, 6, 8});
+    }
+
+    SECTION("tensordot uses the logical contents of sliced tensors") {
+        cpptensor::Tensor lhs_base({2, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8});
+        cpptensor::Tensor rhs({2}, {1, 0});
+
+        auto lhs = lhs_base.slice(0, 1, 2);
+        auto result = cpptensor::tensordot(lhs, rhs, 1);
+
+        require_shape(result, {1, 2});
+        require_data(result, {5, 7});
+    }
 }
 
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
@@ -374,4 +436,3 @@ TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[
     REQUIRE(out.data()[8] == Approx(81.0f));
 }
 #endif
-
