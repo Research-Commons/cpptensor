@@ -45,7 +45,12 @@ struct EigResult {
  * @throws std::runtime_error if A is not 2D, not square, not on CPU, or computation fails
  *
  * @note User is responsible for ensuring A is symmetric. No symmetry check is performed.
- * @note Requires OpenBLAS/LAPACK (USE_OPENBLAS=ON)
+ * @note Uses LAPACK's divide-and-conquer `ssyevd` backend. Eigenvalues are
+ *       returned in ascending order, and eigenvectors are returned as columns.
+ * @note Non-contiguous CPU views are copied into a contiguous row-major buffer
+ *       before entering LAPACK.
+ * @note Requires OpenBLAS/LAPACK (USE_OPENBLAS=ON). Throws on illegal LAPACK
+ *       arguments or convergence failure.
  *
  * Example:
  * @code
@@ -81,7 +86,13 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors = true);
  *       - If eigenvalues_imag[j] == 0: column j of eigenvectors is real
  *       - If eigenvalues_imag[j] != 0: columns j and j+1 form complex conjugate pair
  *         (real part in column j, imaginary part in column j+1)
- * @note Requires OpenBLAS/LAPACK (USE_OPENBLAS=ON)
+ * @note Eigenvalues are returned in LAPACK's backend-defined order; no sorting
+ *       is applied by cpptensor. Complex-conjugate eigenvalue pairs remain
+ *       adjacent so their packed eigenvectors can be decoded.
+ * @note Non-contiguous CPU views are copied into a contiguous row-major buffer
+ *       before entering LAPACK.
+ * @note Requires OpenBLAS/LAPACK (USE_OPENBLAS=ON). Throws on illegal LAPACK
+ *       arguments or QR convergence failure.
  *
  * Example:
  * @code

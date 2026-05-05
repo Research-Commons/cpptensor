@@ -1,188 +1,37 @@
-// #include "cpptensor/ops/linearAlgebra/svd.hpp"
-// #include <stdexcept>
-// #include <algorithm>
-// #include <cstring>
-//
-// #ifdef USE_OPENBLAS
-//     extern "C" {
-//         /**
-//          * LAPACK single-precision SVD routine
-//          *
-//          * Computes the singular value decomposition of a real M-by-N matrix A:
-//          *   A = U * SIGMA * V^T
-//          *
-//          * Arguments:
-//          *   JOBU   - char: 'A' (all M cols of U), 'S' (min(M,N) cols), 'N' (no U)
-//          *   JOBVT  - char: 'A' (all N rows of V^T), 'S' (min(M,N) rows), 'N' (no V^T)
-//          *   M      - int: number of rows of A
-//          *   N      - int: number of columns of A
-//          *   A      - float[M*N]: input matrix (destroyed on output)
-//          *   LDA    - int: leading dimension of A (>= M)
-//          *   S      - float[min(M,N)]: singular values in descending order
-//          *   U      - float[LDU*UCOL]: left singular vectors
-//          *   LDU    - int: leading dimension of U
-//          *   VT     - float[LDVT*N]: right singular vectors (transposed)
-//          *   LDVT   - int: leading dimension of VT
-//          *   WORK   - float[LWORK]: workspace array
-//          *   LWORK  - int: size of WORK (-1 for query)
-//          *   INFO   - int: output status (0=success, <0=illegal arg, >0=convergence failure)
-//          */
-//         void sgesvd_(
-//             const char* jobu,
-//             const char* jobvt,
-//             const int* m,
-//             const int* n,
-//             float* a,
-//             const int* lda,
-//             float* s,
-//             float* u,
-//             const int* ldu,
-//             float* vt,
-//             const int* ldvt,
-//             float* work,
-//             const int* lwork,
-//             int* info
-//         );
-//     }
-// #endif
-//
-// namespace cpptensor {
-//
-//     SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
-//         // ===== Step 1: Validate Input =====
-//         if (A.device_type() != DeviceType::CPU) {
-//             throw std::runtime_error("svd: only CPU tensors supported");
-//         }
-//
-//         const auto& shape = A.shape();
-//         if (shape.size() != 2) {
-//             throw std::runtime_error("svd: input must be 2D matrix, got " +
-//                                     std::to_string(shape.size()) + "D tensor");
-//         }
-//
-//         int M = static_cast<int>(shape[0]);  // Number of rows
-//         int N = static_cast<int>(shape[1]);  // Number of columns
-//         int K = std::min(M, N);              // Number of singular values
-//
-//         if (M == 0 || N == 0) {
-//             throw std::runtime_error("svd: matrix dimensions cannot be zero");
-//         }
-//
-//     #ifdef USE_OPENBLAS
-//         // ===== Step 2: Prepare Input (LAPACK destroys input matrix) =====
-//         std::vector<float> a_copy = A.data();
-//
-//         // ===== Step 3: Determine Job Specifications =====
-//         // JOBU:  'A' = all M columns of U, 'S' = first min(M,N) columns, 'N' = no U
-//         // JOBVT: 'A' = all N rows of V^T, 'S' = first min(M,N) rows, 'N' = no V^T
-//         char jobu  = compute_uv ? (full_matrices ? 'A' : 'S') : 'N';
-//         char jobvt = compute_uv ? (full_matrices ? 'A' : 'S') : 'N';
-//
-//         // ===== Step 4: Allocate Output Arrays =====
-//         // Singular values (always computed)
-//         std::vector<float> s(K);
-//
-//         // Left singular vectors U
-//         int u_rows = M;
-//         int u_cols = compute_uv ? (full_matrices ? M : K) : 1;  // At least 1 for LAPACK
-//         std::vector<float> u_data(u_rows * u_cols);
-//
-//         // Right singular vectors V^T (transposed)
-//         int vt_rows = compute_uv ? (full_matrices ? N : K) : 1;  // At least 1 for LAPACK
-//         int vt_cols = N;
-//         std::vector<float> vt_data(vt_rows * vt_cols);
-//
-//         // Leading dimensions (for column-major layout)
-//         int lda  = M;
-//         int ldu  = M;
-//         int ldvt = compute_uv ? vt_rows : 1;
-//
-//         // ===== Step 5: Workspace Query =====
-//         // First call with lwork=-1 to determine optimal workspace size
-//         int lwork = -1;
-//         float work_query;
-//         int info;
-//
-//         sgesvd_(&jobu, &jobvt, &M, &N,
-//                 a_copy.data(), &lda,
-//                 s.data(),
-//                 u_data.data(), &ldu,
-//                 vt_data.data(), &ldvt,
-//                 &work_query, &lwork,
-//                 &info);
-//
-//         if (info != 0) {
-//             throw std::runtime_error("svd: workspace query failed with info=" + std::to_string(info));
-//         }
-//
-//         // Allocate optimal workspace
-//         lwork = static_cast<int>(work_query);
-//         std::vector<float> work(lwork);
-//
-//         // ===== Step 6: Perform SVD Computation =====
-//         sgesvd_(&jobu, &jobvt, &M, &N,
-//                 a_copy.data(), &lda,
-//                 s.data(),
-//                 u_data.data(), &ldu,
-//                 vt_data.data(), &ldvt,
-//                 work.data(), &lwork,
-//                 &info);
-//
-//         // ===== Step 7: Check for Errors =====
-//         if (info < 0) {
-//             throw std::runtime_error("svd: LAPACK sgesvd illegal argument at position " +
-//                                     std::to_string(-info));
-//         } else if (info > 0) {
-//             throw std::runtime_error("svd: LAPACK sgesvd failed to converge. " +
-//                                     std::to_string(info) + " superdiagonals did not converge to zero");
-//         }
-//
-//         // ===== Step 8: Construct Result Tensors =====
-//         SVDResult result;
-//
-//         // Singular values (always present)
-//         result.S = Tensor({static_cast<size_t>(K)}, s, DeviceType::CPU);
-//
-//         // Left and right singular vectors (if requested)
-//         if (compute_uv) {
-//             result.U = Tensor({static_cast<size_t>(u_rows), static_cast<size_t>(u_cols)},
-//                              u_data, DeviceType::CPU);
-//             result.Vt = Tensor({static_cast<size_t>(vt_rows), static_cast<size_t>(vt_cols)},
-//                               vt_data, DeviceType::CPU);
-//         } else {
-//             // Return empty tensors when U and Vt not computed
-//             result.U = Tensor({0, 0}, std::vector<float>{}, DeviceType::CPU);
-//             result.Vt = Tensor({0, 0}, std::vector<float>{}, DeviceType::CPU);
-//         }
-//
-//         return result;
-//
-//     #else
-//         // ===== No LAPACK Available =====
-//         throw std::runtime_error(
-//             "svd: requires OpenBLAS/LAPACK library.\n"
-//             "Please rebuild with: cmake -DUSE_OPENBLAS=ON ..\n"
-//             "Make sure OpenBLAS is installed on your system."
-//         );
-//     #endif
-//     }
-//
-// } // namespace cpptensor
-
 #include "cpptensor/ops/linearAlgebra/svd.hpp"
-#include <stdexcept>
+
 #include <algorithm>
-#include <cstring>
+#include <string>
+#include <stdexcept>
+#include <vector>
 
 #ifdef USE_OPENBLAS
-// Use LAPACKE (C interface) which supports row-major layout directly
 #include <lapacke.h>
 #endif
 
 namespace cpptensor {
+namespace {
+
+std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
+    const auto& shape = matrix.shape();
+    const auto& stride = matrix.stride();
+    const float* data_ptr = matrix.impl()->data_ptr();
+
+    const size_t rows = shape[0];
+    const size_t cols = shape[1];
+
+    std::vector<float> buffer(rows * cols);
+    for (size_t row = 0; row < rows; ++row) {
+        for (size_t col = 0; col < cols; ++col) {
+            buffer[row * cols + col] = data_ptr[row * stride[0] + col * stride[1]];
+        }
+    }
+    return buffer;
+}
+
+} // namespace
 
 SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
-    // ===== Step 1: Validate Input =====
     if (A.device_type() != DeviceType::CPU) {
         throw std::runtime_error("svd: only CPU tensors supported");
     }
@@ -190,93 +39,72 @@ SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
     const auto& shape = A.shape();
     if (shape.size() != 2) {
         throw std::runtime_error("svd: input must be 2D matrix, got " +
-                                std::to_string(shape.size()) + "D tensor");
+                                 std::to_string(shape.size()) + "D tensor");
     }
 
-    int M = static_cast<int>(shape[0]);  // Number of rows
-    int N = static_cast<int>(shape[1]);  // Number of columns
-    int K = std::min(M, N);              // Number of singular values
+    const int M = static_cast<int>(shape[0]);
+    const int N = static_cast<int>(shape[1]);
+    const int K = std::min(M, N);
 
     if (M == 0 || N == 0) {
         throw std::runtime_error("svd: matrix dimensions cannot be zero");
     }
 
 #ifdef USE_OPENBLAS
-    // ===== Step 2: Prepare Input =====
-    // LAPACKE supports row-major layout directly, so no transpose needed!
-    std::vector<float> a_copy = A.data();
+    std::vector<float> a_copy = copy_matrix_to_row_major_buffer(A);
+    std::vector<float> singular_values(K);
 
-    // ===== Step 3: Determine Job Specifications =====
-    // JOBU:  'A' = all M columns of U, 'S' = first min(M,N) columns, 'N' = no U
-    // JOBVT: 'A' = all N rows of V^T, 'S' = first min(M,N) rows, 'N' = no V^T
-    char jobu  = compute_uv ? (full_matrices ? 'A' : 'S') : 'N';
-    char jobvt = compute_uv ? (full_matrices ? 'A' : 'S') : 'N';
+    const char jobz = compute_uv ? (full_matrices ? 'A' : 'S') : 'N';
 
-    // ===== Step 4: Allocate Output Arrays =====
-    // Singular values (always computed)
-    std::vector<float> s(K);
+    const int result_u_rows = compute_uv ? M : 0;
+    const int result_u_cols = compute_uv ? (full_matrices ? M : K) : 0;
+    const int result_vt_rows = compute_uv ? (full_matrices ? N : K) : 0;
+    const int result_vt_cols = compute_uv ? N : 0;
 
-    // Left singular vectors U
-    int u_rows = M;
-    int u_cols = compute_uv ? (full_matrices ? M : K) : 1;
-    std::vector<float> u_data(u_rows * u_cols);
+    const int lapack_u_cols = compute_uv ? result_u_cols : 1;
+    const int lapack_vt_cols = compute_uv ? result_vt_cols : 1;
 
-    // Right singular vectors V^T (transposed)
-    int vt_rows = compute_uv ? (full_matrices ? N : K) : 1;
-    int vt_cols = N;
-    std::vector<float> vt_data(vt_rows * vt_cols);
+    std::vector<float> u_data(compute_uv ? static_cast<size_t>(result_u_rows * result_u_cols) : 1, 0.0f);
+    std::vector<float> vt_data(compute_uv ? static_cast<size_t>(result_vt_rows * result_vt_cols) : 1, 0.0f);
 
-    // ===== Step 5: Allocate Superb (for LAPACKE interface) =====
-    std::vector<float> superb(std::min(M, N) - 1);
-
-    // ===== Step 6: Perform SVD using LAPACKE (row-major interface) =====
-    int info = LAPACKE_sgesvd(
-        LAPACK_ROW_MAJOR,   // Row-major layout (C/C++ convention)
-        jobu,               // Compute U?
-        jobvt,              // Compute V^T?
-        M,                  // Number of rows
-        N,                  // Number of columns
-        a_copy.data(),      // Input matrix (destroyed)
-        N,                  // Leading dimension (for row-major: number of columns)
-        s.data(),           // Singular values output
-        u_data.data(),      // U output
-        u_cols,             // Leading dimension of U (for row-major)
-        vt_data.data(),     // V^T output
-        vt_cols,            // Leading dimension of V^T (for row-major)
-        superb.data()       // Superdiagonal elements (for divide-and-conquer)
+    const int info = LAPACKE_sgesdd(
+        LAPACK_ROW_MAJOR,
+        jobz,
+        M,
+        N,
+        a_copy.data(),
+        N,
+        singular_values.data(),
+        u_data.data(),
+        lapack_u_cols,
+        vt_data.data(),
+        lapack_vt_cols
     );
 
-    // ===== Step 7: Check for Errors =====
     if (info < 0) {
-        throw std::runtime_error("svd: LAPACKE_sgesvd illegal argument at position " +
-                                std::to_string(-info));
-    } else if (info > 0) {
-        throw std::runtime_error("svd: LAPACKE_sgesvd failed to converge. " +
-                                std::to_string(info) + " superdiagonals did not converge to zero");
+        throw std::runtime_error("svd: LAPACKE_sgesdd illegal argument at position " +
+                                 std::to_string(-info));
+    }
+    if (info > 0) {
+        throw std::runtime_error("svd: LAPACKE_sgesdd failed to converge. "
+                                 "The divide-and-conquer bidiagonal solver did not converge");
     }
 
-    // ===== Step 8: Construct Result Tensors =====
     SVDResult result;
+    result.S = Tensor({static_cast<size_t>(K)}, singular_values, DeviceType::CPU);
 
-    // Singular values (always present)
-    result.S = Tensor({static_cast<size_t>(K)}, s, DeviceType::CPU);
-
-    // Left and right singular vectors (if requested)
     if (compute_uv) {
-        result.U = Tensor({static_cast<size_t>(u_rows), static_cast<size_t>(u_cols)},
-                         u_data, DeviceType::CPU);
-        result.Vt = Tensor({static_cast<size_t>(vt_rows), static_cast<size_t>(vt_cols)},
-                          vt_data, DeviceType::CPU);
+        result.U = Tensor({static_cast<size_t>(result_u_rows), static_cast<size_t>(result_u_cols)},
+                          u_data, DeviceType::CPU);
+        result.Vt = Tensor({static_cast<size_t>(result_vt_rows), static_cast<size_t>(result_vt_cols)},
+                           vt_data, DeviceType::CPU);
     } else {
-        // Return empty tensors when U and Vt not computed
         result.U = Tensor({0, 0}, std::vector<float>{}, DeviceType::CPU);
         result.Vt = Tensor({0, 0}, std::vector<float>{}, DeviceType::CPU);
     }
 
     return result;
-
 #else
-    // ===== No LAPACK Available =====
     throw std::runtime_error(
         "svd: requires OpenBLAS/LAPACK library.\n"
         "Please rebuild with: cmake -DUSE_OPENBLAS=ON ..\n"
@@ -286,5 +114,3 @@ SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
 }
 
 } // namespace cpptensor
-
-
