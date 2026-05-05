@@ -22,4 +22,8 @@ inline float real_pow(float base, float exponent) {
     return std::pow(base, exponent);
 }
 
+inline bool pow_requires_scalar_fallback(float base, float exponent) {
+    return base <= 0.0f || !std::isfinite(base) || !std::isfinite(exponent);
+}
+
 } // namespace cpptensor::detail

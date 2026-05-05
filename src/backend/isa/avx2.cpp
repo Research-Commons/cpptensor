@@ -346,9 +346,9 @@ namespace cpptensor {
         std::int64_t i = 0;
 
         for (; i + stride <= n; i += stride) {
-            __m256 va = _mm256_loadu_ps(a + i);
-            __m256 vo = log256_ps(va);
-            _mm256_storeu_ps(o + i, vo);
+            for (int lane = 0; lane < stride; ++lane) {
+                o[i + lane] = std::log(a[i + lane]);
+            }
         }
 
         // remainder (scalar fallback)
@@ -382,17 +382,13 @@ namespace cpptensor {
         for (; i + stride <= n; i += stride) {
             __m256 va = _mm256_loadu_ps(a + i);
             __m256 vb = _mm256_loadu_ps(b + i);
-            __m256 negative_mask = _mm256_cmp_ps(va, _mm256_setzero_ps(), _CMP_LT_OQ);
-            int negative_lanes = _mm256_movemask_ps(negative_mask);
 
             __m256 v_pow = exp256_ps(_mm256_mul_ps(vb, log256_ps(va)));
             _mm256_storeu_ps(o + i, v_pow);
 
-            if (negative_lanes != 0) {
-                for (int lane = 0; lane < stride; ++lane) {
-                    if ((negative_lanes & (1 << lane)) != 0) {
-                        o[i + lane] = detail::real_pow(a[i + lane], b[i + lane]);
-                    }
+            for (int lane = 0; lane < stride; ++lane) {
+                if (detail::pow_requires_scalar_fallback(a[i + lane], b[i + lane])) {
+                    o[i + lane] = detail::real_pow(a[i + lane], b[i + lane]);
                 }
             }
         }
@@ -450,12 +446,6 @@ namespace cpptensor {
 
         for (; i + stride <= n; i += stride) {
             __m256 va = _mm256_loadu_ps(a + i);
-
-            // Optional safety: clamp negatives to 0 before sqrt
-            __m256 zeros = _mm256_setzero_ps();
-            __m256 mask = _mm256_cmp_ps(va, zeros, _CMP_LT_OS); // va < 0
-            va = _mm256_blendv_ps(va, zeros, mask);
-
             __m256 vsqrt = _mm256_sqrt_ps(va);
             _mm256_storeu_ps(o + i, vsqrt);
         }
@@ -1678,4 +1668,3 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
     }
 
 } // namespace cppgrad
-

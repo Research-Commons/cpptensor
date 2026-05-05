@@ -59,6 +59,19 @@
 | **Cosine** | `cos(A)` | cos(x) for each element | ✅ Working |
 | **Tangent** | `tan(A)` | tan(x) for each element | ✅ Working |
 
+#### Domain and IEEE-style edge semantics
+
+On CPU, `div`, `log`, `sqrt`, and `pow` follow the corresponding real-valued `std::`/IEEE floating-point semantics for the domain-edge cases listed below. This contract is shared by the generic CPU kernels and the AVX2 fast paths; special AVX2 lanes fall back to scalar handling when needed.
+
+| Operation | Contract |
+|-----------|----------|
+| `A / B` | Uses IEEE-754 floating-point division. `x / +0` and `x / -0` produce signed infinities based on operand signs, and indeterminate forms such as `0 / 0` produce `NaN`. |
+| `log(A)` | Matches `std::log` on domain edges: `log(0)` returns `-inf`, while `log(negative)` returns `NaN`. |
+| `sqrt(A)` | Matches `std::sqrt` on domain edges: `sqrt(negative)` returns `NaN`; signed zero is preserved by the underlying math library. |
+| `pow(A, B)` | Follows `std::pow` for zero-base and signed-zero edge cases, while negative finite bases with non-integer exponents are explicitly treated as out-of-domain and return `NaN`. For example, `pow(-0, odd positive)` is `-0`, `pow(-0, odd negative)` is `-inf`, and `pow(0, 0)` is `1`. |
+
+CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log`, `sqrt`, or `pow`. Attempting those ops on `DeviceType::CUDA` tensors fails with the dispatcher’s missing-kernel error instead of silently using different semantics.
+
 ### 4. Activation Functions
 
 | Operation | Function | Description | Status |
