@@ -11,6 +11,9 @@ namespace cpptensor {
      */
     inline std::vector<size_t> pad_shape_right(const std::vector<size_t>& shape, int n) {
         if (n < 0) throw std::runtime_error("pad_shape_right: negative n");
+        if (n < static_cast<int>(shape.size())) {
+            throw std::runtime_error("pad_shape_right: target rank smaller than shape rank");
+        }
         std::vector<size_t> res((size_t)n, 1);
         int offset = n - static_cast<int>(shape.size());
         for (size_t i = 0; i < shape.size(); ++i) res[offset + i] = shape[i];
