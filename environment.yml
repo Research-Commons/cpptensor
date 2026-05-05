@@ -1,0 +1,28 @@
+name: cpptensor
+channels:
+  - conda-forge
+dependencies:
+  # Utility/runtime tools
+  - python>=3.11
+  - pip
+  - git
+  - pkg-config
+
+  # Build systems used by CMakeLists.txt and developer workflows
+  - cmake>=3.26
+  - ninja
+  - make
+
+  # Modern conda-forge compiler toolchain for CPU C++ builds.
+  # cpptensor requests C++26 in CMake; use the newest available compiler stack.
+  - c-compiler
+  - cxx-compiler
+  - fortran-compiler
+
+  # BLAS/LAPACK dependencies used by matmul/dot/SVD/EIG when USE_OPENBLAS=ON.
+  - libblas=*=*openblas
+  - liblapack=*=*openblas
+  - libopenblas
+  - libcblas
+  - liblapacke
+  - openblas
