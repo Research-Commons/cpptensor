@@ -303,6 +303,22 @@ TEST_CASE("comparison operators support tensor, scalar, and broadcast operands",
     require_data(a < row, {0, 1, 1, 0, 0, 1});
 }
 
+TEST_CASE("comparison operators honor the runtime ISA override on same-shape CPU tensors",
+          "[comparison][dispatch]") {
+    cpptensor::initialize_kernels();
+    ScopedCpuIsaOverride force_generic("generic");
+
+    cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor b({2, 3}, {1, 0, 3, 10, 5, 0});
+
+    require_data(a == b, {1, 0, 1, 0, 1, 0});
+    require_data(a != b, {0, 1, 0, 1, 0, 1});
+    require_data(a > b, {0, 1, 0, 0, 0, 1});
+    require_data(a < b, {0, 0, 0, 1, 0, 0});
+    require_data(a >= b, {1, 1, 1, 0, 1, 1});
+    require_data(a <= b, {1, 0, 1, 1, 1, 0});
+}
+
 TEST_CASE("compute_broadcast_shape rejects incompatible dimensions and preserves valid broadcasts",
           "[broadcast]") {
     REQUIRE_THROWS_WITH(cpptensor::compute_broadcast_shape({2}, {3}),
