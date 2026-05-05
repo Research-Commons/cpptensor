@@ -212,6 +212,22 @@ TEST_CASE("contiguous honors raw-pointer-backed view offsets", "[tensor][contigu
     require_data(materialized, {1, 3});
 }
 
+TEST_CASE("pointer-backed views expose logical const data and reject mutable storage",
+          "[tensor][data][from_ptr]") {
+    cpptensor::Tensor owner({6}, {0, 1, 2, 3, 4, 5});
+    auto subrange = cpptensor::Tensor::from_ptr(
+        {4},
+        owner.data().data() + 1,
+        owner.impl(),
+        owner.device_type());
+
+    require_shape(subrange, {4});
+    require_data(subrange, {1, 2, 3, 4});
+    REQUIRE_THROWS_WITH(
+        subrange.data(),
+        Catch::Matchers::ContainsSubstring("pointer-backed views"));
+}
+
 TEST_CASE("clone deep-copies sliced views using the logical view contents", "[tensor][clone][view]") {
     cpptensor::Tensor base({4}, {0, 1, 2, 3});
 

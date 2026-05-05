@@ -216,14 +216,16 @@ namespace cpptensor {
             // Check if we can create zero-copy views
             bool A_is_contiguous = is_batch_slice_contiguous(A);
             bool B_is_contiguous = is_batch_slice_contiguous(B);
+            const auto& A_impl = *A.impl();
+            const auto& B_impl = *B.impl();
 
             if (A_is_contiguous) {
                 // Zero-copy view using raw pointer
-                float* A_ptr = const_cast<float*>(A.data().data() + baseA);
+                float* A_ptr = const_cast<float*>(A_impl.data_ptr() + baseA);
                 A2D = Tensor::from_ptr({M, K}, A_ptr, A.impl(), A.device_type());
             } else {
                 // Need to copy (non-contiguous batch slice)
-                const float* A_ptr = A.data().data() + baseA;
+                const float* A_ptr = A_impl.data_ptr() + baseA;
                 std::vector<float> A_block(M * K);
                 std::copy(A_ptr, A_ptr + (M * K), A_block.begin());
                 A2D = Tensor({M, K}, A_block, A.device_type());
@@ -231,11 +233,11 @@ namespace cpptensor {
 
             if (B_is_contiguous) {
                 // Zero-copy view using raw pointer
-                float* B_ptr = const_cast<float*>(B.data().data() + baseB);
+                float* B_ptr = const_cast<float*>(B_impl.data_ptr() + baseB);
                 B2D = Tensor::from_ptr({K, N}, B_ptr, B.impl(), B.device_type());
             } else {
                 // Need to copy (non-contiguous batch slice)
-                const float* B_ptr = B.data().data() + baseB;
+                const float* B_ptr = B_impl.data_ptr() + baseB;
                 std::vector<float> B_block(K * N);
                 std::copy(B_ptr, B_ptr + (K * N), B_block.begin());
                 B2D = Tensor({K, N}, B_block, B.device_type());
@@ -302,8 +304,8 @@ namespace cpptensor {
         const float alpha = 1.0f;
         const float beta = 0.0f;
 
-        const float* Adata = A.data().data();
-        const float* xdata = x.data().data();
+        const float* Adata = A.impl()->data_ptr();
+        const float* xdata = x.impl()->data_ptr();
         float* ydata = y.data().data();
 
         cblas_sgemv(
@@ -359,8 +361,8 @@ namespace cpptensor {
         const float alpha = 1.0f;
         const float beta = 0.0f;
 
-        const float* Adata = A.data().data();
-        const float* Bdata = B.data().data();
+        const float* Adata = A.impl()->data_ptr();
+        const float* Bdata = B.impl()->data_ptr();
         float* Cdata = C.data().data();
 
         // Set transpose flags based on stride pattern
