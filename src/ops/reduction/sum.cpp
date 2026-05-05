@@ -12,8 +12,8 @@ namespace cpptensor {
         int actual_dim = -1;
 
         if (!dim.has_value()) {
-            // Sum all elements -> scalar
-            out_shape = {1};
+            // Sum all elements -> scalar unless keepdim preserves singleton axes
+            out_shape = keepdim ? std::vector<size_t>(ndim, 1) : std::vector<size_t>{};
             actual_dim = -1;
         } else {
             int d = dim.value();
@@ -37,10 +37,6 @@ namespace cpptensor {
                 out_shape.erase(out_shape.begin() + d);
             }
 
-            // Ensure output shape is not empty (at least a scalar)
-            if (out_shape.empty()) {
-                out_shape = {1};
-            }
         }
 
         // Create output tensor

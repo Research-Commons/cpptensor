@@ -1827,12 +1827,23 @@ int main() {
         std::cout << "\nSliced B = A.slice(0, 1, 3):" << std::endl;
         B.print();
 
-        // Modify slice - should modify original
-        B.data()[0] = 999.0f;
-        std::cout << "\nAfter modifying B.data()[0] = 999:" << std::endl;
-        std::cout << "B: "; B.print();
-        std::cout << "A: "; A.print();
-        std::cout << "✓ Data is shared (zero-copy view)!" << std::endl;
+        std::cout << "\nB.data() exposes logical row-major values for the slice:" << std::endl;
+        B.print();
+
+        try {
+            B.data()[0] = 999.0f;
+            std::cout << "Unexpectedly obtained mutable slice storage." << std::endl;
+        } catch (const std::exception& ex) {
+            std::cout << "Mutable data() is rejected for sliced views: " << ex.what() << std::endl;
+        }
+
+        Tensor B_copy = B.contiguous();
+        B_copy.data()[0] = 999.0f;
+        std::cout << "\nAfter modifying B.contiguous().data()[0] = 999:" << std::endl;
+        std::cout << "B copy: "; B_copy.print();
+        std::cout << "Original B: "; B.print();
+        std::cout << "Original A: "; A.print();
+        std::cout << "✓ Slice remains zero-copy, while contiguous() gives a mutable compact copy." << std::endl;
     }
 
     // 3. Negative Indices
