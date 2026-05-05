@@ -333,11 +333,6 @@ namespace cpptensor {
             }
         }
 
-        // Handle edge case: squeezing all dims results in scalar
-        if (new_shape.empty() && numel() == 1) {
-            new_shape.push_back(1);  // Keep as 1D tensor with single element
-        }
-
         return reshape(new_shape);
     }
 

@@ -38,6 +38,7 @@ namespace cpptensor {
     /**
      * Compute the broadcasted shape of two shapes (right-aligned).
      * Example: [2,3] and [3] => [2,3]
+     * @throws std::runtime_error if any aligned dimensions are incompatible
      */
     inline std::vector<size_t> compute_broadcast_shape(const std::vector<size_t>& a_sh,
                                                        const std::vector<size_t>& b_sh) {
@@ -45,7 +46,19 @@ namespace cpptensor {
         auto a_pad = pad_shape_right(a_sh, n);
         auto b_pad = pad_shape_right(b_sh, n);
         std::vector<size_t> out_sh((size_t)n);
-        for (int i = 0; i < n; ++i) out_sh[(size_t)i] = std::max(a_pad[(size_t)i], b_pad[(size_t)i]);
+        for (int i = 0; i < n; ++i) {
+            const size_t a_dim = a_pad[(size_t)i];
+            const size_t b_dim = b_pad[(size_t)i];
+
+            if (a_dim != b_dim && a_dim != 1 && b_dim != 1) {
+                throw std::runtime_error(
+                    "compute_broadcast_shape: incompatible dimensions " +
+                    std::to_string(a_dim) + " and " + std::to_string(b_dim) +
+                    " at aligned axis " + std::to_string(i));
+            }
+
+            out_sh[(size_t)i] = std::max(a_dim, b_dim);
+        }
         return out_sh;
     }
 
@@ -71,10 +84,13 @@ namespace cpptensor {
         if ((int)unpadded_shape.size() > n) throw std::runtime_error("squeeze: target rank > padded rank");
 
         size_t padded_total = numel(padded_shape);
+        if (padded.size() != padded_total) {
+            throw std::runtime_error("squeeze: padded buffer size does not match padded shape");
+        }
         if (padded_total == 0) return {};
 
         if (unpadded_shape.empty()) {
-            // scalar: sum all elements
+            // scalar: sum all elements in the validated logical extent
             float acc = 0.0f;
             for (float v : padded) acc += v;
             return std::vector<float>{acc};
