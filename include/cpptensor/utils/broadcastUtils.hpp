@@ -35,6 +35,7 @@ namespace cpptensor {
     /**
      * Compute the broadcasted shape of two shapes (right-aligned).
      * Example: [2,3] and [3] => [2,3]
+     * @throws std::runtime_error if any aligned dimensions are incompatible
      */
     inline std::vector<size_t> compute_broadcast_shape(const std::vector<size_t>& a_sh,
                                                        const std::vector<size_t>& b_sh) {
@@ -42,7 +43,19 @@ namespace cpptensor {
         auto a_pad = pad_shape_right(a_sh, n);
         auto b_pad = pad_shape_right(b_sh, n);
         std::vector<size_t> out_sh((size_t)n);
-        for (int i = 0; i < n; ++i) out_sh[(size_t)i] = std::max(a_pad[(size_t)i], b_pad[(size_t)i]);
+        for (int i = 0; i < n; ++i) {
+            const size_t a_dim = a_pad[(size_t)i];
+            const size_t b_dim = b_pad[(size_t)i];
+
+            if (a_dim != b_dim && a_dim != 1 && b_dim != 1) {
+                throw std::runtime_error(
+                    "compute_broadcast_shape: incompatible dimensions " +
+                    std::to_string(a_dim) + " and " + std::to_string(b_dim) +
+                    " at aligned axis " + std::to_string(i));
+            }
+
+            out_sh[(size_t)i] = std::max(a_dim, b_dim);
+        }
         return out_sh;
     }
 

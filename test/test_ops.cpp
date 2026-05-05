@@ -1,4 +1,5 @@
 #include <catch2/catch_approx.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "cpptensor/ops/comparison/eq.hpp"
@@ -12,6 +13,7 @@
 #include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
 #include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/utils/broadcastUtils.hpp"
 
 #include <vector>
 
@@ -102,6 +104,15 @@ TEST_CASE("comparison operators support tensor, scalar, and broadcast operands",
     cpptensor::Tensor row({1, 3}, {1, 5, 10});
     require_shape(a < row, {2, 3});
     require_data(a < row, {0, 1, 1, 0, 0, 1});
+}
+
+TEST_CASE("compute_broadcast_shape rejects incompatible dimensions and preserves valid broadcasts",
+          "[broadcast]") {
+    REQUIRE_THROWS_WITH(cpptensor::compute_broadcast_shape({2}, {3}),
+                        Catch::Matchers::ContainsSubstring("incompatible dimensions 2 and 3"));
+
+    REQUIRE(cpptensor::compute_broadcast_shape({2, 1, 4}, {1, 3, 4}) ==
+            std::vector<size_t>{2, 3, 4});
 }
 
 TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gemv]") {
