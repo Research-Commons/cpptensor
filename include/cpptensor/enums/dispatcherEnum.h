@@ -109,6 +109,12 @@ enum class OpType {
     // =============== Utility Functions ===============
     Abs,      ///< Element-wise absolute value: B = |A|
 
+    // =============== Reduction Operations ===============
+    Sum,      ///< Reduction sum: B = sum(A, dim, keepdim)
+    Mean,     ///< Reduction mean: B = mean(A, dim, keepdim)
+    Max,      ///< Reduction max: B = max(A, dim, keepdim)
+    Min,      ///< Reduction min: B = min(A, dim, keepdim)
+
     // =============== Linear Algebra ===============
     Matmul,   ///< Matrix multiplication: C = A @ B
     Dot       ///< Dot product (vector inner product): scalar = A · B

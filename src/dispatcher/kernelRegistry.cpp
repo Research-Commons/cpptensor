@@ -18,6 +18,13 @@ namespace cpptensor {
         registerUnaryKernel(op, dev, CpuIsa::GENERIC, std::move(fn));
     }
 
+    void KernelRegistry::registerReductionKernel(OpType op, DeviceType dev, CpuIsa isa, ReductionKernelFunc fn) {
+        reduction_forward_[{op, dev, isa}] = std::move(fn);
+    }
+    void KernelRegistry::registerReductionKernel(OpType op, DeviceType dev, ReductionKernelFunc fn) {
+        registerReductionKernel(op, dev, CpuIsa::GENERIC, std::move(fn));
+    }
+
     // Try exact (op,dev,best_isa) then degrade to AVX2 then GENERIC
     KernelRegistry::KernelFunc KernelRegistry::getKernel(OpType op, DeviceType dev) {
         if (dev == DeviceType::CPU) {
@@ -49,5 +56,21 @@ namespace cpptensor {
         auto cpu_fallback = unary_forward_.find({op, DeviceType::CPU, CpuIsa::GENERIC});
         if (cpu_fallback != unary_forward_.end()) return cpu_fallback->second;
         throw std::runtime_error("No unary kernel registered for this op/device");
+    }
+
+    KernelRegistry::ReductionKernelFunc KernelRegistry::getReductionKernel(OpType op, DeviceType dev) {
+        if (dev == DeviceType::CPU) {
+            auto best = detect_best_cpu_isa();
+            for (CpuIsa isa : {best, CpuIsa::AVX2, CpuIsa::GENERIC}) {
+                auto it = reduction_forward_.find({op, dev, isa});
+                if (it != reduction_forward_.end()) return it->second;
+            }
+        }
+        // Non-CPU fallback
+        auto exact = reduction_forward_.find({op, dev, CpuIsa::GENERIC});
+        if (exact != reduction_forward_.end()) return exact->second;
+        auto cpu_fallback = reduction_forward_.find({op, DeviceType::CPU, CpuIsa::GENERIC});
+        if (cpu_fallback != reduction_forward_.end()) return cpu_fallback->second;
+        throw std::runtime_error("No reduction kernel registered for this op/device");
     }
 }

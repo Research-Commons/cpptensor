@@ -28,6 +28,10 @@
 #include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/ops/linearAlgebra/svd.hpp"
 #include "cpptensor/ops/linearAlgebra/eig.hpp"
+#include "cpptensor/ops/reduction/sum.hpp"
+#include "cpptensor/ops/reduction/mean.hpp"
+#include "cpptensor/ops/reduction/max.hpp"
+#include "cpptensor/ops/reduction/min.hpp"
 
 //#include <gperftools/profiler.h>
 
@@ -785,6 +789,476 @@ int main() {
         for (auto s : flattened.shape()) std::cout << s << " ";
         std::cout << "]" << std::endl;
     }
+
+    // ====== Reduction Operations Examples ======
+    std::cout << "\n\n===== REDUCTION OPERATIONS EXAMPLES =====" << std::endl;
+
+    // 1. Sum Operations
+    std::cout << "\n--- 1. Sum Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
+        std::cout << "Original tensor A [2×3]:" << std::endl;
+        A.print();
+
+        // Sum all elements
+        Tensor sum_all = A.sum();
+        std::cout << "Sum of all elements: " << sum_all.data()[0] << " (expected: 21)" << std::endl;
+
+        // Sum along dimension 0 (columns)
+        Tensor sum_dim0 = A.sum(0);
+        std::cout << "Sum along dim 0 (columns): ";
+        sum_dim0.print();
+        std::cout << "  Expected: [5, 7, 9]" << std::endl;
+
+        // Sum along dimension 1 (rows)
+        Tensor sum_dim1 = A.sum(1);
+        std::cout << "Sum along dim 1 (rows): ";
+        sum_dim1.print();
+        std::cout << "  Expected: [6, 15]" << std::endl;
+
+        // Sum with keepdim
+        Tensor sum_keepdim = A.sum(0, true);
+        std::cout << "Sum dim 0 with keepdim, shape: [";
+        for (auto s : sum_keepdim.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 2. Mean Operations
+    std::cout << "\n--- 2. Mean Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {2, 4, 6, 8, 10, 12});
+        std::cout << "Original tensor A [2×3]:" << std::endl;
+        A.print();
+
+        // Mean of all elements
+        Tensor mean_all = A.mean();
+        std::cout << "Mean of all elements: " << mean_all.data()[0] << " (expected: 7)" << std::endl;
+
+        // Mean along dimension 0
+        Tensor mean_dim0 = A.mean(0);
+        std::cout << "Mean along dim 0: ";
+        mean_dim0.print();
+        std::cout << "  Expected: [5, 7, 9]" << std::endl;
+
+        // Mean along dimension 1
+        Tensor mean_dim1 = A.mean(1);
+        std::cout << "Mean along dim 1: ";
+        mean_dim1.print();
+        std::cout << "  Expected: [4, 10]" << std::endl;
+    }
+
+    // 3. Max Operations
+    std::cout << "\n--- 3. Max Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {3, 1, 4, 1, 5, 9});
+        std::cout << "Original tensor A [2×3]:" << std::endl;
+        A.print();
+
+        // Max of all elements
+        Tensor max_all = A.max();
+        std::cout << "Max of all elements: " << max_all.data()[0] << " (expected: 9)" << std::endl;
+
+        // Max along dimension 0
+        Tensor max_dim0 = A.max(0);
+        std::cout << "Max along dim 0: ";
+        max_dim0.print();
+        std::cout << "  Expected: [3, 5, 9]" << std::endl;
+
+        // Max along dimension 1
+        Tensor max_dim1 = A.max(1);
+        std::cout << "Max along dim 1: ";
+        max_dim1.print();
+        std::cout << "  Expected: [4, 9]" << std::endl;
+
+        // Max with keepdim
+        Tensor max_keepdim = A.max(1, true);
+        std::cout << "Max dim 1 with keepdim, shape: [";
+        for (auto s : max_keepdim.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+    }
+
+    // 4. Min Operations
+    std::cout << "\n--- 4. Min Operations ---" << std::endl;
+    {
+        Tensor A({2, 3}, {3, 1, 4, 1, 5, 9});
+        std::cout << "Original tensor A [2×3]:" << std::endl;
+        A.print();
+
+        // Min of all elements
+        Tensor min_all = A.min();
+        std::cout << "Min of all elements: " << min_all.data()[0] << " (expected: 1)" << std::endl;
+
+        // Min along dimension 0
+        Tensor min_dim0 = A.min(0);
+        std::cout << "Min along dim 0: ";
+        min_dim0.print();
+        std::cout << "  Expected: [1, 1, 4]" << std::endl;
+
+        // Min along dimension 1
+        Tensor min_dim1 = A.min(1);
+        std::cout << "Min along dim 1: ";
+        min_dim1.print();
+        std::cout << "  Expected: [1, 1]" << std::endl;
+    }
+
+    // 5. 3D Tensor Reductions
+    std::cout << "\n--- 5. 3D Tensor Reductions ---" << std::endl;
+    {
+        Tensor A = Tensor::full({2, 3, 4}, 1.0f);
+        // Add some variation
+        auto& data = A.data();
+        for (size_t i = 0; i < data.size(); ++i) {
+            data[i] = static_cast<float>(i);
+        }
+
+        std::cout << "3D tensor A [2×3×4], values 0-23" << std::endl;
+
+        // Sum along different dimensions
+        Tensor sum_d0 = A.sum(0);
+        std::cout << "Sum along dim 0, result shape: [";
+        for (auto s : sum_d0.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [3, 4])" << std::endl;
+
+        Tensor sum_d1 = A.sum(1);
+        std::cout << "Sum along dim 1, result shape: [";
+        for (auto s : sum_d1.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 4])" << std::endl;
+
+        Tensor sum_d2 = A.sum(2);
+        std::cout << "Sum along dim 2, result shape: [";
+        for (auto s : sum_d2.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3])" << std::endl;
+
+        // All reductions
+        float sum_total = A.sum().data()[0];
+        float mean_total = A.mean().data()[0];
+        float max_total = A.max().data()[0];
+        float min_total = A.min().data()[0];
+
+        std::cout << "All reductions on 3D tensor:" << std::endl;
+        std::cout << "  Sum:  " << sum_total << " (expected: 276 = 0+1+...+23)" << std::endl;
+        std::cout << "  Mean: " << mean_total << " (expected: 11.5)" << std::endl;
+        std::cout << "  Max:  " << max_total << " (expected: 23)" << std::endl;
+        std::cout << "  Min:  " << min_total << " (expected: 0)" << std::endl;
+    }
+
+    // 6. Real-world Example: Batch Statistics
+    std::cout << "\n--- 6. Real-world Example: Batch Statistics ---" << std::endl;
+    {
+        // Simulate batch of images: [batch=4, channels=3, height=8, width=8]
+        Tensor batch = Tensor::randn({4, 3, 8, 8});
+
+        // Compute statistics across batch
+        Tensor batch_mean = batch.mean(0);  // Mean across batch dimension
+        std::cout << "Batch mean shape: [";
+        for (auto s : batch_mean.shape()) std::cout << s << " ";
+        std::cout << "] (per-channel mean)" << std::endl;
+
+        // Global statistics
+        float global_mean = batch.mean().data()[0];
+        float global_max = batch.max().data()[0];
+        float global_min = batch.min().data()[0];
+
+        std::cout << "Global batch statistics:" << std::endl;
+        std::cout << "  Mean: " << global_mean << std::endl;
+        std::cout << "  Max:  " << global_max << std::endl;
+        std::cout << "  Min:  " << global_min << std::endl;
+        std::cout << "  Range: [" << global_min << ", " << global_max << "]" << std::endl;
+    }
+
+    // 7. Chaining Reductions
+    std::cout << "\n--- 7. Chaining Multiple Reductions ---" << std::endl;
+    {
+        Tensor A = Tensor::randn({4, 5, 6});
+
+        // Multi-step reduction
+        Tensor step1 = A.sum(2);     // Sum over last dim: [4, 5, 6] -> [4, 5]
+        Tensor step2 = step1.mean(1); // Mean over dim 1:    [4, 5] -> [4]
+        Tensor step3 = step2.max();   // Max of all:         [4] -> scalar
+
+        std::cout << "Chained reductions A.sum(2).mean(1).max():" << std::endl;
+        std::cout << "  After sum(2):  shape [";
+        for (auto s : step1.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+        std::cout << "  After mean(1): shape [";
+        for (auto s : step2.shape()) std::cout << s << " ";
+        std::cout << "]" << std::endl;
+        std::cout << "  After max():   scalar value = " << step3.data()[0] << std::endl;
+    }
+
+    // 8. Comparison of All Reduction Operations
+    std::cout << "\n--- 8. Side-by-side Comparison ---" << std::endl;
+    {
+        Tensor A({3, 4}, {
+            1.5f,  2.0f,  -1.0f,  3.5f,
+            0.5f,  4.0f,   2.5f, -0.5f,
+            -2.0f, 1.0f,   3.0f,  2.0f
+        });
+        std::cout << "Test tensor A [3×4]:" << std::endl;
+        A.print();
+
+        std::cout << "\nAll reductions along dim=1 (rows):" << std::endl;
+        Tensor sum = A.sum(1);
+        Tensor mean = A.mean(1);
+        Tensor max = A.max(1);
+        Tensor min = A.min(1);
+
+        std::cout << "  Sum:  "; sum.print();
+        std::cout << "  Mean: "; mean.print();
+        std::cout << "  Max:  "; max.print();
+        std::cout << "  Min:  "; min.print();
+    }
+
+    // NEW: Test overloaded reduction methods
+    std::cout << "\n=== TESTING NEW OVERLOADED REDUCTION METHODS ===" << std::endl;
+    {
+        Tensor A({2, 3, 4}, {
+            1.0f,  2.0f,  3.0f,  4.0f,   // [0, :, :]
+            5.0f,  6.0f,  7.0f,  8.0f,
+            9.0f, 10.0f, 11.0f, 12.0f,
+
+            13.0f, 14.0f, 15.0f, 16.0f,  // [1, :, :]
+            17.0f, 18.0f, 19.0f, 20.0f,
+            21.0f, 22.0f, 23.0f, 24.0f
+        });
+
+        std::cout << "\n--- Testing Global Reductions (no dim parameter) ---" << std::endl;
+        std::cout << "Tensor A: shape [2, 3, 4], values 1-24" << std::endl;
+
+        // Test global reductions with new overload
+        auto sum_global = A.sum();
+        std::cout << "A.sum() [global]:     " << sum_global.data()[0] << " (expected: 300)" << std::endl;
+
+        auto mean_global = A.mean();
+        std::cout << "A.mean() [global]:    " << mean_global.data()[0] << " (expected: 12.5)" << std::endl;
+
+        auto max_global = A.max();
+        std::cout << "A.max() [global]:     " << max_global.data()[0] << " (expected: 24)" << std::endl;
+
+        auto min_global = A.min();
+        std::cout << "A.min() [global]:     " << min_global.data()[0] << " (expected: 1)" << std::endl;
+
+        std::cout << "\n--- Testing Dimensional Reductions (with dim parameter) ---" << std::endl;
+
+        // Test dimensional reductions
+        auto sum_dim0 = A.sum(0);
+        std::cout << "A.sum(0) shape: [";
+        for (auto s : sum_dim0.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [3, 4])" << std::endl;
+
+        auto sum_dim2 = A.sum(2);
+        std::cout << "A.sum(2) shape: [";
+        for (auto s : sum_dim2.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3])" << std::endl;
+
+        // Test negative indexing
+        auto sum_neg1 = A.sum(-1);
+        std::cout << "A.sum(-1) shape: [";
+        for (auto s : sum_neg1.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3], same as sum(2))" << std::endl;
+
+        auto sum_neg2 = A.sum(-2);
+        std::cout << "A.sum(-2) shape: [";
+        for (auto s : sum_neg2.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 4], same as sum(1))" << std::endl;
+
+        // Verify negative indexing works correctly
+        bool neg_indexing_works = (sum_neg1.shape() == sum_dim2.shape());
+        std::cout << "\n✓ Negative indexing verification: "
+                  << (neg_indexing_works ? "PASS" : "FAIL") << std::endl;
+
+        // Test keepdim with global reduction
+        auto sum_keepdim = A.sum(true);
+        std::cout << "\nA.sum(true) [global with keepdim] shape: [";
+        for (auto s : sum_keepdim.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [1, 1, 1])" << std::endl;
+
+        // Test keepdim with dimensional reduction
+        auto sum_dim1_keepdim = A.sum(1, true);
+        std::cout << "A.sum(1, true) [dim with keepdim] shape: [";
+        for (auto s : sum_dim1_keepdim.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 1, 4])" << std::endl;
+
+        std::cout << "\n✓ All overload tests completed successfully!" << std::endl;
+    }
+
+    // EDGE CASE TESTS
+    std::cout << "\n=== EDGE CASE TESTS FOR REDUCTION OPERATIONS ===" << std::endl;
+
+    // Test 1: Single element tensor
+    std::cout << "\n--- Test 1: Single Element Tensor ---" << std::endl;
+    {
+        Tensor single({1}, std::vector<float>{42.0f});
+        std::cout << "Single element tensor: [42.0]" << std::endl;
+        std::cout << "sum():  " << single.sum().data()[0] << " (expected: 42)" << std::endl;
+        std::cout << "mean(): " << single.mean().data()[0] << " (expected: 42)" << std::endl;
+        std::cout << "max():  " << single.max().data()[0] << " (expected: 42)" << std::endl;
+        std::cout << "min():  " << single.min().data()[0] << " (expected: 42)" << std::endl;
+    }
+
+    // Test 2: All zeros
+    std::cout << "\n--- Test 2: All Zeros ---" << std::endl;
+    {
+        Tensor zeros({2, 3}, std::vector<float>{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f});
+        std::cout << "Tensor of all zeros [2x3]" << std::endl;
+        std::cout << "sum():  " << zeros.sum().data()[0] << " (expected: 0)" << std::endl;
+        std::cout << "mean(): " << zeros.mean().data()[0] << " (expected: 0)" << std::endl;
+        std::cout << "max():  " << zeros.max().data()[0] << " (expected: 0)" << std::endl;
+        std::cout << "min():  " << zeros.min().data()[0] << " (expected: 0)" << std::endl;
+    }
+
+    // Test 3: All same values
+    std::cout << "\n--- Test 3: All Same Values ---" << std::endl;
+    {
+        Tensor same({2, 4}, std::vector<float>{5.5f, 5.5f, 5.5f, 5.5f, 5.5f, 5.5f, 5.5f, 5.5f});
+        std::cout << "Tensor of all 5.5 [2x4]" << std::endl;
+        std::cout << "sum():  " << same.sum().data()[0] << " (expected: 44)" << std::endl;
+        std::cout << "mean(): " << same.mean().data()[0] << " (expected: 5.5)" << std::endl;
+        std::cout << "max():  " << same.max().data()[0] << " (expected: 5.5)" << std::endl;
+        std::cout << "min():  " << same.min().data()[0] << " (expected: 5.5)" << std::endl;
+    }
+
+    // Test 4: Negative values
+    std::cout << "\n--- Test 4: Negative Values ---" << std::endl;
+    {
+        Tensor negative({2, 3}, std::vector<float>{-5.0f, -2.0f, -8.0f, -1.0f, -3.0f, -6.0f});
+        std::cout << "Tensor with negative values: [-5, -2, -8, -1, -3, -6]" << std::endl;
+        std::cout << "sum():  " << negative.sum().data()[0] << " (expected: -25)" << std::endl;
+        std::cout << "mean(): " << negative.mean().data()[0] << " (expected: -4.1667)" << std::endl;
+        std::cout << "max():  " << negative.max().data()[0] << " (expected: -1)" << std::endl;
+        std::cout << "min():  " << negative.min().data()[0] << " (expected: -8)" << std::endl;
+    }
+
+    // Test 5: Mixed positive and negative
+    std::cout << "\n--- Test 5: Mixed Positive and Negative ---" << std::endl;
+    {
+        Tensor mixed({2, 3}, std::vector<float>{-3.0f, 2.0f, -1.0f, 5.0f, -4.0f, 1.0f});
+        std::cout << "Mixed tensor: [-3, 2, -1, 5, -4, 1]" << std::endl;
+        std::cout << "sum():  " << mixed.sum().data()[0] << " (expected: 0)" << std::endl;
+        std::cout << "mean(): " << mixed.mean().data()[0] << " (expected: 0)" << std::endl;
+        std::cout << "max():  " << mixed.max().data()[0] << " (expected: 5)" << std::endl;
+        std::cout << "min():  " << mixed.min().data()[0] << " (expected: -4)" << std::endl;
+    }
+
+    // Test 6: Large dimension size (1D tensor)
+    std::cout << "\n--- Test 6: 1D Tensor (100 elements) ---" << std::endl;
+    {
+        std::vector<float> data_1d(100);
+        for (int i = 0; i < 100; i++) data_1d[i] = static_cast<float>(i + 1);
+        Tensor large_1d({100}, data_1d);
+
+        float expected_sum = 5050.0f; // 1+2+...+100 = 100*101/2
+        float expected_mean = 50.5f;
+
+        std::cout << "1D tensor with values 1-100" << std::endl;
+        std::cout << "sum():  " << large_1d.sum().data()[0] << " (expected: " << expected_sum << ")" << std::endl;
+        std::cout << "mean(): " << large_1d.mean().data()[0] << " (expected: " << expected_mean << ")" << std::endl;
+        std::cout << "max():  " << large_1d.max().data()[0] << " (expected: 100)" << std::endl;
+        std::cout << "min():  " << large_1d.min().data()[0] << " (expected: 1)" << std::endl;
+    }
+
+    // Test 7: Reduction along first/last dimensions of high-rank tensor
+    std::cout << "\n--- Test 7: 4D Tensor Reductions ---" << std::endl;
+    {
+        std::vector<float> data_4d(2*3*4*5);
+        for (size_t i = 0; i < data_4d.size(); i++) data_4d[i] = static_cast<float>(i);
+        Tensor tensor_4d({2, 3, 4, 5}, data_4d);
+
+        std::cout << "4D tensor shape: [2, 3, 4, 5]" << std::endl;
+
+        auto sum_dim0 = tensor_4d.sum(0);
+        std::cout << "sum(0) shape: [";
+        for (auto s : sum_dim0.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [3, 4, 5])" << std::endl;
+
+        auto sum_dim3 = tensor_4d.sum(3);
+        std::cout << "sum(3) shape: [";
+        for (auto s : sum_dim3.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3, 4])" << std::endl;
+
+        auto sum_neg1 = tensor_4d.sum(-1);
+        std::cout << "sum(-1) shape: [";
+        for (auto s : sum_neg1.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3, 4], same as sum(3))" << std::endl;
+
+        auto sum_neg4 = tensor_4d.sum(-4);
+        std::cout << "sum(-4) shape: [";
+        for (auto s : sum_neg4.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [3, 4, 5], same as sum(0))" << std::endl;
+    }
+
+    // Test 8: Very small floating point values
+    std::cout << "\n--- Test 8: Very Small Floating Point Values ---" << std::endl;
+    {
+        Tensor tiny({3}, std::vector<float>{1e-6f, 2e-6f, 3e-6f});
+        std::cout << "Tensor with tiny values: [1e-6, 2e-6, 3e-6]" << std::endl;
+        std::cout << "sum():  " << tiny.sum().data()[0] << " (expected: 6e-6)" << std::endl;
+        std::cout << "mean(): " << tiny.mean().data()[0] << " (expected: 2e-6)" << std::endl;
+    }
+
+    // Test 9: Verify sum reduction with keepdim on each dimension
+    std::cout << "\n--- Test 9: keepdim=true for all dimensions ---" << std::endl;
+    {
+        Tensor A({2, 3, 4}, std::vector<float>(24, 1.0f)); // All ones
+
+        auto sum_d0_keep = A.sum(0, true);
+        std::cout << "sum(0, keepdim=true) shape: [";
+        for (auto s : sum_d0_keep.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [1, 3, 4])" << std::endl;
+
+        auto sum_d1_keep = A.sum(1, true);
+        std::cout << "sum(1, keepdim=true) shape: [";
+        for (auto s : sum_d1_keep.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 1, 4])" << std::endl;
+
+        auto sum_d2_keep = A.sum(2, true);
+        std::cout << "sum(2, keepdim=true) shape: [";
+        for (auto s : sum_d2_keep.shape()) std::cout << s << " ";
+        std::cout << "] (expected: [2, 3, 1])" << std::endl;
+    }
+
+    // Test 10: Verify all operations give consistent results
+    std::cout << "\n--- Test 10: Consistency Check Across Operations ---" << std::endl;
+    {
+        Tensor data({3, 4}, {
+            10.0f, 20.0f, 30.0f, 40.0f,
+            50.0f, 60.0f, 70.0f, 80.0f,
+            90.0f, 100.0f, 110.0f, 120.0f
+        });
+
+        std::cout << "Tensor [3x4] with values 10, 20, ..., 120" << std::endl;
+
+        // Global reductions
+        auto sum_g = data.sum();
+        auto mean_g = data.mean();
+        float expected_sum = 780.0f; // 10+20+...+120
+        float expected_mean = 65.0f; // 780/12
+
+        std::cout << "Global sum:  " << sum_g.data()[0] << " (expected: " << expected_sum << ")" << std::endl;
+        std::cout << "Global mean: " << mean_g.data()[0] << " (expected: " << expected_mean << ")" << std::endl;
+
+        // Verify: sum/count == mean
+        float computed_mean = sum_g.data()[0] / 12.0f;
+        bool mean_check = std::abs(computed_mean - mean_g.data()[0]) < 1e-5f;
+        std::cout << "sum/count == mean: " << (mean_check ? "✓ PASS" : "✗ FAIL") << std::endl;
+
+        // Dimensional sum along dim=1
+        auto sum_d1 = data.sum(1);
+        std::cout << "sum(1) values: [";
+        for (int i = 0; i < 3; i++) std::cout << sum_d1.data()[i] << " ";
+        std::cout << "] (expected: [100, 260, 420])" << std::endl;
+
+        // Verify max >= min
+        auto max_g = data.max();
+        auto min_g = data.min();
+        bool max_min_check = max_g.data()[0] >= min_g.data()[0];
+        std::cout << "max >= min: " << (max_min_check ? "✓ PASS" : "✗ FAIL");
+        std::cout << " (max=" << max_g.data()[0] << ", min=" << min_g.data()[0] << ")" << std::endl;
+    }
+
+    std::cout << "\n✓ All edge case tests completed!" << std::endl;
+
+    std::cout << "\n===== END OF REDUCTION EXAMPLES =====" << std::endl;
 
     std::cout << "\n===== END OF EXAMPLES =====" << std::endl;
 

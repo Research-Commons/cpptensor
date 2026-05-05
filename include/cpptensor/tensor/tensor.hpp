@@ -500,10 +500,162 @@ class Tensor {
         Tensor clone() const;
 
         // =============== Reduction Operations ===============
-        // TODO: Implement reduction operations
-        // Tensor sum(int dim = -1, bool keepdim = false) const;
-        // Tensor mean(int dim = -1, bool keepdim = false) const;
-        // Tensor max(int dim = -1, bool keepdim = false) const;
+
+        /**
+         * @brief Sum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by summing all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto total = A.sum();         // Global sum, shape [1]
+         * auto total2 = A.sum(true);    // Global sum with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor sum(bool keepdim = false) const;
+
+        /**
+         * @brief Sum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by summing along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.sum(1);            // Sum along dim 1 → shape [2, 4]
+         * auto C = A.sum(-1);           // Sum along last dim → shape [2, 3]
+         * auto D = A.sum(0, true);      // Sum along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor sum(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Mean (average) of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by computing the mean of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto avg = A.mean();          // Global mean, shape [1]
+         * auto avg2 = A.mean(true);     // Global mean with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor mean(bool keepdim = false) const;
+
+        /**
+         * @brief Mean (average) of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by computing the mean along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.mean(1);           // Mean along dim 1 → shape [2, 4]
+         * auto C = A.mean(-1);          // Mean along last dim → shape [2, 3]
+         * auto D = A.mean(0, true);     // Mean along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor mean(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Maximum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by finding the maximum of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto max_val = A.max();       // Global max, shape [1]
+         * auto max_val2 = A.max(true);  // Global max with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor max(bool keepdim = false) const;
+
+        /**
+         * @brief Maximum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by finding the maximum along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.max(1);            // Max along dim 1 → shape [2, 4]
+         * auto C = A.max(-1);           // Max along last dim → shape [2, 3]
+         * auto D = A.max(0, true);      // Max along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor max(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Minimum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by finding the minimum of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto min_val = A.min();       // Global min, shape [1]
+         * auto min_val2 = A.min(true);  // Global min with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor min(bool keepdim = false) const;
+
+        /**
+         * @brief Minimum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by finding the minimum along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.min(1);            // Min along dim 1 → shape [2, 4]
+         * auto C = A.min(-1);           // Min along last dim → shape [2, 3]
+         * auto D = A.min(0, true);      // Min along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor min(int dim, bool keepdim = false) const;
 
         // =============== Operator Overloads (Element-wise) ===============
 
