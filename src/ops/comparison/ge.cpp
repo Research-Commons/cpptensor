@@ -14,13 +14,15 @@ Tensor ge(const Tensor& a, const Tensor& b) {
     
     std::vector<size_t> out_shape = computeBroadcastShape(a.shape(), b.shape());
     Tensor out = Tensor::full(out_shape, 0.0f, a.device_type());
+    const Tensor lhs = materialize_for_backend_input(a);
+    const Tensor rhs = materialize_for_backend_input(b);
     
     // Broadcasting stays on the generic CPU kernel; same-shape comparisons use runtime ISA dispatch.
     if (a.device_type() == DeviceType::CPU && needsBroadcast(a.shape(), b.shape())) {
-        CPU::geKernel(a, b, out);
+        CPU::geKernel(lhs, rhs, out);
     } else {
         KernelRegistry::instance()
-            .getKernel(OpType::Ge, a.device_type())(a, b, out);
+            .getKernel(OpType::Ge, a.device_type())(lhs, rhs, out);
     }
     
     return out;

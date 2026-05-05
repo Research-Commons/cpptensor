@@ -3,6 +3,8 @@
 #include <vector>
 #include <stdexcept>
 
+#include "cpptensor/tensor/tensor.hpp"
+
 
 //| A.shape | B.shape | Output                                                                   | Notes                                        |
 //| ------- | ------- | ------------------------------------------------------------------------ | -------------------------------------------- |
@@ -29,6 +31,17 @@ static std::vector<size_t> computeBroadcastShape(const std::vector<size_t>& a, c
     }
     return out;
 }
+
+namespace cpptensor {
+
+inline Tensor materialize_for_backend_input(const Tensor& tensor) {
+    if (tensor.is_contiguous()) {
+        return tensor;
+    }
+    return tensor.contiguous();
+}
+
+} // namespace cpptensor
 
 // Helper: check if two shapes require broadcasting (used for hybrid SIMD dispatch)
 static bool needsBroadcast(const std::vector<size_t>& shape_a, const std::vector<size_t>& shape_b) {

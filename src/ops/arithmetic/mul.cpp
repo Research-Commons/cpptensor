@@ -15,12 +15,14 @@ namespace cpptensor {
         }
         std::vector<size_t> out_shape = computeBroadcastShape(a.shape(), b.shape());
         Tensor out(out_shape, 0.0f, a.device_type());
+        const Tensor lhs = materialize_for_backend_input(a);
+        const Tensor rhs = materialize_for_backend_input(b);
 
         if (a.device_type() == DeviceType::CPU && needsBroadcast(a.shape(), b.shape())) {
-            CPU::mulKernel(a, b, out);
+            CPU::mulKernel(lhs, rhs, out);
         } else {
             KernelRegistry::instance()
-                .getKernel(OpType::Mul, a.device_type())(a, b, out);
+                .getKernel(OpType::Mul, a.device_type())(lhs, rhs, out);
         }
         return out;
     }

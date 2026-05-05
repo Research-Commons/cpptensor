@@ -1,5 +1,6 @@
 #include "cpptensor/ops/reduction/mean.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
+#include "cpptensor/ops/helperOps.hpp"
 #include <stdexcept>
 
 namespace cpptensor {
@@ -41,11 +42,12 @@ namespace cpptensor {
 
         // Create output tensor
         Tensor out = Tensor::zeros(out_shape, A.device_type());
+        const Tensor input = materialize_for_backend_input(A);
 
         // Get and call the reduction kernel
         KernelRegistry::instance()
             .getReductionKernel(OpType::Mean, A.device_type())
-            (A, out, actual_dim, keepdim);
+            (input, out, actual_dim, keepdim);
 
         return out;
     }
