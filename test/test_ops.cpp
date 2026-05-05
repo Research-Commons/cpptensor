@@ -120,3 +120,30 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_shape(t.min(-1), {2});
     require_data(t.min(-1), {1, 4});
 }
+
+TEST_CASE("contiguous materializes view values from the logical view start", "[tensor][contiguous]") {
+    cpptensor::Tensor base({4}, {0, 1, 2, 3});
+
+    auto stepped = base.slice(0, 1, 4, 2);
+    auto materialized = stepped.contiguous();
+
+    REQUIRE_FALSE(stepped.is_contiguous());
+    require_shape(materialized, {2});
+    require_data(materialized, {1, 3});
+}
+
+TEST_CASE("contiguous honors raw-pointer-backed view offsets", "[tensor][contiguous][from_ptr]") {
+    cpptensor::Tensor owner({6}, {0, 1, 2, 3, 4, 5});
+    auto subrange = cpptensor::Tensor::from_ptr(
+        {4},
+        owner.data().data() + 1,
+        owner.impl(),
+        owner.device_type());
+
+    auto stepped = subrange.slice(0, 0, 4, 2);
+    auto materialized = stepped.contiguous();
+
+    REQUIRE_FALSE(stepped.is_contiguous());
+    require_shape(materialized, {2});
+    require_data(materialized, {1, 3});
+}
