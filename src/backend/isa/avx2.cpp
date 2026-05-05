@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
 
@@ -379,24 +380,16 @@ namespace cpptensor {
         std::int64_t i = 0;
 
         for (; i + stride <= n; i += stride) {
-            __m256 va = _mm256_loadu_ps(a + i);
-            __m256 vb = _mm256_loadu_ps(b + i);
-
-            // log(a)
-            __m256 v_log = log256_ps(va);
-
-            // b * log(a)
-            __m256 v_mul = _mm256_mul_ps(vb, v_log);
-
-            // exp(b * log(a))
-            __m256 v_pow = exp256_ps(v_mul);
-
-            _mm256_storeu_ps(o + i, v_pow);
+            // Correctness-first lane evaluation: std::pow preserves the real-domain
+            // behavior for negative bases with integer exponents, which the old
+            // exp(log(a) * b) approximation could not represent.
+            for (int lane = 0; lane < stride; ++lane) {
+                o[i + lane] = detail::real_pow(a[i + lane], b[i + lane]);
+            }
         }
 
-        // rem
         for (; i < n; ++i) {
-            o[i] = std::pow(a[i], b[i]);
+            o[i] = detail::real_pow(a[i], b[i]);
         }
     }
 
