@@ -7,7 +7,11 @@
 #ifdef BUILD_AVX2
 #include "cpptensor/backend/isa/avx2.hpp"
 #endif
+#include "cpptensor/ops/arithmetic/add.hpp"
+#include "cpptensor/ops/arithmetic/div.hpp"
+#include "cpptensor/ops/arithmetic/mul.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
+#include "cpptensor/ops/arithmetic/sub.hpp"
 #include "cpptensor/ops/comparison/eq.hpp"
 #include "cpptensor/ops/comparison/ge.hpp"
 #include "cpptensor/ops/comparison/gt.hpp"
@@ -233,6 +237,36 @@ void require_nan_data(const cpptensor::Tensor& tensor) {
     }
 }
 
+void require_broadcast_arithmetic_results() {
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor row({1, 3}, {10, 20, 30});
+    cpptensor::Tensor vector({3}, {10, 20, 30});
+    cpptensor::Tensor tensor3d({2, 1, 3}, {1, 2, 3, 4, 5, 6});
+
+    const std::vector<float> add_expected {11, 22, 33, 14, 25, 36};
+    const std::vector<float> sub_expected {-9, -18, -27, -6, -15, -24};
+    const std::vector<float> mul_expected {10, 40, 90, 40, 100, 180};
+    const std::vector<float> div_expected {0.1f, 0.1f, 0.1f, 0.4f, 0.25f, 0.2f};
+
+    require_shape(matrix + row, {2, 3});
+    require_data(matrix + row, add_expected);
+    require_data(matrix - row, sub_expected);
+    require_data(matrix * row, mul_expected);
+    require_data(matrix / row, div_expected);
+
+    require_shape(row + matrix, {2, 3});
+    require_data(row + matrix, add_expected);
+    require_data(row - matrix, {9, 18, 27, 6, 15, 24});
+    require_data(row * matrix, mul_expected);
+    require_data(row / matrix, {10.0f, 10.0f, 10.0f, 2.5f, 4.0f, 5.0f});
+
+    require_shape(tensor3d + vector, {2, 1, 3});
+    require_data(tensor3d + vector, add_expected);
+    require_data(tensor3d - vector, sub_expected);
+    require_data(tensor3d * vector, mul_expected);
+    require_data(tensor3d / vector, div_expected);
+}
+
 TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][cat]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor b({2, 3}, {7, 8, 9, 10, 11, 12});
@@ -454,6 +488,30 @@ TEST_CASE("comparison operators honor the runtime ISA override on same-shape CPU
     require_data(a < b, {0, 0, 0, 1, 0, 0});
     require_data(a >= b, {1, 1, 1, 0, 1, 1});
     require_data(a <= b, {1, 0, 1, 1, 1, 0});
+}
+
+TEST_CASE("arithmetic operators preserve broadcast semantics under runtime ISA overrides",
+          "[arithmetic][broadcast][dispatch]") {
+    cpptensor::initialize_kernels();
+
+    {
+        ScopedCpuIsaOverride force_generic("generic");
+        require_broadcast_arithmetic_results();
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride force_avx2("avx2");
+        require_broadcast_arithmetic_results();
+    }
+#endif
+
+#ifdef BUILD_AVX512
+    if (cpptensor::has_avx512f()) {
+        ScopedCpuIsaOverride force_avx512("avx512");
+        require_broadcast_arithmetic_results();
+    }
+#endif
 }
 
 TEST_CASE("compute_broadcast_shape rejects incompatible dimensions and preserves valid broadcasts",
