@@ -265,6 +265,111 @@ TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     require_data(dim2, {1, 5, 2, 6, 3, 7, 4, 8});
 }
 
+TEST_CASE("cat preserves logical data from tensor views", "[manipulation][cat][views]") {
+    SECTION("offset row slices match owning tensors") {
+        cpptensor::Tensor base({4}, {0, 1, 2, 3});
+        auto view = base.slice(0, 1, 3);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::cat({view, view}, 0);
+        auto from_owning = cpptensor::cat({owning, owning}, 0);
+
+        require_shape(from_view, {4});
+        require_data(from_view, {1, 2, 1, 2});
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("column slices match owning tensors") {
+        cpptensor::Tensor matrix({3, 4}, {
+            0, 1, 2, 3,
+            4, 5, 6, 7,
+            8, 9, 10, 11
+        });
+        auto view = matrix.slice(1, 1, 3);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::cat({view, view}, 1);
+        auto from_owning = cpptensor::cat({owning, owning}, 1);
+
+        require_shape(from_view, {3, 4});
+        require_data(from_view, {
+            1, 2, 1, 2,
+            5, 6, 5, 6,
+            9, 10, 9, 10
+        });
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("stepped slices match owning tensors") {
+        cpptensor::Tensor base({6}, {0, 1, 2, 3, 4, 5});
+        auto view = base.slice(0, 1, 6, 2);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::cat({view, view}, 0);
+        auto from_owning = cpptensor::cat({owning, owning}, 0);
+
+        require_shape(from_view, {6});
+        require_data(from_view, {1, 3, 5, 1, 3, 5});
+        require_data(from_view, from_owning.data());
+    }
+}
+
+TEST_CASE("stack preserves logical data from tensor views", "[manipulation][stack][views]") {
+    SECTION("offset row slices match owning tensors") {
+        cpptensor::Tensor base({4}, {0, 1, 2, 3});
+        auto view = base.slice(0, 1, 3);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::stack({view, view}, 0);
+        auto from_owning = cpptensor::stack({owning, owning}, 0);
+
+        require_shape(from_view, {2, 2});
+        require_data(from_view, {1, 2, 1, 2});
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("column slices match owning tensors") {
+        cpptensor::Tensor matrix({3, 4}, {
+            0, 1, 2, 3,
+            4, 5, 6, 7,
+            8, 9, 10, 11
+        });
+        auto view = matrix.slice(1, 1, 3);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::stack({view, view}, 1);
+        auto from_owning = cpptensor::stack({owning, owning}, 1);
+
+        require_shape(from_view, {3, 2, 2});
+        require_data(from_view, {
+            1, 2, 1, 2,
+            5, 6, 5, 6,
+            9, 10, 9, 10
+        });
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("transposed views match owning tensors") {
+        cpptensor::Tensor matrix({2, 3}, {
+            0, 1, 2,
+            3, 4, 5
+        });
+        auto view = matrix.transpose(0, 1);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::stack({view, view}, 2);
+        auto from_owning = cpptensor::stack({owning, owning}, 2);
+
+        require_shape(from_view, {3, 2, 2});
+        require_data(from_view, {
+            0, 0, 3, 3,
+            1, 1, 4, 4,
+            2, 2, 5, 5
+        });
+        require_data(from_view, from_owning.data());
+    }
+}
+
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
     cpptensor::Tensor singleton({1}, std::vector<float>{42});
     auto scalar = singleton.squeeze();
