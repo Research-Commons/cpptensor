@@ -7,8 +7,11 @@ namespace cpptensor {
      * @brief Concatenate tensors along a dimension
      *
      * Concatenates the given sequence of tensors along an existing dimension.
-     * All tensors must have the same shape except in the concatenating dimension.
-     * All tensors must have the same number of dimensions.
+     * All tensors must have the same shape except in the concatenating dimension,
+     * the same number of dimensions, and the same device placement.
+     *
+     * The output tensor preserves the common input device. Non-contiguous
+     * inputs (for example slices or transposes) are read in logical order.
      *
      * @param tensors Vector of tensors to concatenate (must be non-empty)
      * @param dim Dimension along which to concatenate (supports negative indexing)
@@ -16,6 +19,7 @@ namespace cpptensor {
      *
      * @throws std::runtime_error if tensors is empty
      * @throws std::runtime_error if tensors have incompatible shapes
+     * @throws std::runtime_error if tensors are on different devices
      * @throws std::runtime_error if dim is out of range
      *
      * @example

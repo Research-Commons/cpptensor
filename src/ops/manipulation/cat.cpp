@@ -107,6 +107,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     // 2. Get reference shape and ndim from first tensor
     const auto& first_tensor = tensors[0];
     auto ref_shape = first_tensor.shape();
+    const DeviceType common_device = first_tensor.device_type();
     int ndim = static_cast<int>(ref_shape.size());
 
     if (ndim == 0) {
@@ -132,9 +133,9 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
         const auto& t = tensors[i];
         auto t_shape = t.shape();
 
-        if (t.device_type() != first_tensor.device_type()) {
+        if (t.device_type() != common_device) {
             throw std::runtime_error("cat: all tensors must be on the same device. Tensor 0 is on " +
-                                     std::string(deviceTypeName(first_tensor.device_type())) +
+                                     std::string(deviceTypeName(common_device)) +
                                      ", but tensor " + std::to_string(i) + " is on " +
                                      std::string(deviceTypeName(t.device_type())));
         }
@@ -166,7 +167,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     out_shape[concat_dim] = total_concat_size;
 
     // 6. Allocate output tensor (initialized to zero)
-    Tensor result = Tensor::zeros(out_shape, first_tensor.device_type());
+    Tensor result = Tensor::zeros(out_shape, common_device);
 
     // 7. Copy data from each input tensor to the output
     size_t offset_in_concat_dim = 0;

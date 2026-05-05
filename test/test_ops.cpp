@@ -326,6 +326,14 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
     require_data(cuda_result, {1, 2, 3, 4});
     REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
 
+    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
+
+    auto negative_dim_result = cpptensor::cat({cuda_matrix_a, cuda_matrix_b}, -1);
+    require_shape(negative_dim_result, {2, 4});
+    require_data(negative_dim_result, {1, 2, 5, 6, 3, 4, 7, 8});
+    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
+
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
@@ -346,6 +354,10 @@ TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     auto dim2 = cpptensor::stack({a, b}, 2);
     require_shape(dim2, {2, 2, 2});
     require_data(dim2, {1, 5, 2, 6, 3, 7, 4, 8});
+
+    auto neg_dim = cpptensor::stack({a, b}, -1);
+    require_shape(neg_dim, {2, 2, 2});
+    require_data(neg_dim, dim2.data());
 }
 
 TEST_CASE("cat preserves logical data from tensor views", "[manipulation][cat][views]") {
@@ -393,6 +405,26 @@ TEST_CASE("cat preserves logical data from tensor views", "[manipulation][cat][v
 
         require_shape(from_view, {6});
         require_data(from_view, {1, 3, 5, 1, 3, 5});
+        require_data(from_view, from_owning.data());
+    }
+
+    SECTION("transposed views match owning tensors") {
+        cpptensor::Tensor matrix({2, 3}, {
+            0, 1, 2,
+            3, 4, 5
+        });
+        auto view = matrix.transpose(0, 1);
+        auto owning = view.contiguous();
+
+        auto from_view = cpptensor::cat({view, view}, -1);
+        auto from_owning = cpptensor::cat({owning, owning}, -1);
+
+        require_shape(from_view, {3, 4});
+        require_data(from_view, {
+            0, 3, 0, 3,
+            1, 4, 1, 4,
+            2, 5, 2, 5
+        });
         require_data(from_view, from_owning.data());
     }
 }
@@ -462,6 +494,14 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
     require_shape(cuda_result, {2, 2});
     require_data(cuda_result, {1, 2, 3, 4});
     REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
+
+    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
+
+    auto negative_dim_result = cpptensor::stack({cuda_matrix_a, cuda_matrix_b}, -1);
+    require_shape(negative_dim_result, {2, 2, 2});
+    require_data(negative_dim_result, {1, 5, 2, 6, 3, 7, 4, 8});
+    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
 
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
@@ -573,6 +613,46 @@ TEST_CASE("sub mul and div support asymmetric broadcasting from the right-hand o
     auto quotient = lhs / rhs;
     require_shape(quotient, {2, 3});
     require_data(quotient, {0.1f, 0.1f, 0.1f, 0.025f, 0.04f, 0.05f});
+}
+
+TEST_CASE("sub mul and div derive mixed-rank broadcast shapes from both operands",
+          "[arithmetic][broadcast]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor lhs({2, 1, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor rhs({1, 4, 1}, {10, 20, 30, 40});
+
+    auto difference = lhs - rhs;
+    require_shape(difference, {2, 4, 3});
+    require_data(difference, {
+        -9, -8, -7, -19, -18, -17, -29, -28, -27, -39, -38, -37,
+        -6, -5, -4, -16, -15, -14, -26, -25, -24, -36, -35, -34
+    });
+
+    auto product = lhs * rhs;
+    require_shape(product, {2, 4, 3});
+    require_data(product, {
+        10, 20, 30, 20, 40, 60, 30, 60, 90, 40, 80, 120,
+        40, 50, 60, 80, 100, 120, 120, 150, 180, 160, 200, 240
+    });
+
+    auto quotient = lhs / rhs;
+    require_shape(quotient, {2, 4, 3});
+    require_data(quotient, {
+        0.1f, 0.2f, 0.3f, 0.05f, 0.1f, 0.15f, 0.0333333f, 0.0666667f, 0.1f, 0.025f, 0.05f, 0.075f,
+        0.4f, 0.5f, 0.6f, 0.2f, 0.25f, 0.3f, 0.1333333f, 0.1666667f, 0.2f, 0.1f, 0.125f, 0.15f
+    });
+}
+
+TEST_CASE("binary ops reject incompatible broadcast shapes consistently",
+          "[arithmetic][comparison][broadcast]") {
+    cpptensor::Tensor lhs({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor rhs({2, 2}, {7, 8, 9, 10});
+
+    REQUIRE_THROWS_WITH(lhs - rhs,
+                        Catch::Matchers::ContainsSubstring("Binary op operands with shapes [2, 3] and [2, 2] are not broadcastable"));
+    REQUIRE_THROWS_WITH((lhs == rhs),
+                        Catch::Matchers::ContainsSubstring("Binary op operands with shapes [2, 3] and [2, 2] are not broadcastable"));
 }
 
 TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gemv]") {
