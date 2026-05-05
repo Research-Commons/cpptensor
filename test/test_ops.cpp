@@ -66,6 +66,25 @@ TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     require_data(dim2, {1, 5, 2, 6, 3, 7, 4, 8});
 }
 
+TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
+    cpptensor::Tensor singleton({1}, std::vector<float>{42});
+    auto scalar = singleton.squeeze();
+    require_shape(scalar, std::vector<size_t>{});
+    REQUIRE(scalar.ndim() == 0);
+    require_data(scalar, {42});
+
+    cpptensor::Tensor all_singletons({1, 1, 1}, std::vector<float>{7});
+    auto squeezed = all_singletons.squeeze();
+    require_shape(squeezed, std::vector<size_t>{});
+    REQUIRE(squeezed.ndim() == 0);
+    require_data(squeezed, {7});
+
+    auto specific_dim = all_singletons.squeeze(1);
+    require_shape(specific_dim, {1, 1});
+    REQUIRE(specific_dim.ndim() == 2);
+    require_data(specific_dim, {7});
+}
+
 TEST_CASE("comparison operators support tensor, scalar, and broadcast operands", "[comparison]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor b({2, 3}, {1, 0, 3, 10, 5, 0});
