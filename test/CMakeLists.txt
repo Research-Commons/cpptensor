@@ -11,3 +11,31 @@ target_link_libraries(cpptensor_test PRIVATE cpptensor Catch2::Catch2WithMain)
 include(CTest)
 include(Catch)
 catch_discover_tests(cpptensor_test)
+
+if(CMAKE_GENERATOR)
+    add_test(
+        NAME cmake_configure_disables_avx_on_aarch64
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-aarch64
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DPROCESSOR=aarch64
+            -DREQUIRED_PATTERNS=AVX2\ kernels:\ requested=OFF,\ enabled=OFF;AVX-512\ kernels:\ requested=OFF,\ enabled=OFF
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+    )
+
+    add_test(
+        NAME cmake_rejects_forced_avx2_on_aarch64
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-aarch64-avx2-on
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DPROCESSOR=aarch64
+            -DEXPECT_FAILURE=ON
+            -DFORCE_BUILD_AVX2=ON
+            -DREQUIRED_PATTERNS=BUILD_AVX2=ON\ requested,\ but\ AVX2\ kernels\ are\ unavailable
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+    )
+endif()
