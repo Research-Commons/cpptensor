@@ -18,7 +18,7 @@ namespace cpptensor {
      * @example
      * ```cpp
      * Tensor A = Tensor::randn({3, 4});
-     * Tensor max_all = max(A);              // Max of all elements, shape: ()
+     * Tensor max_all = max(A);              // Max of all elements, shape: []
      * Tensor max_dim0 = max(A, 0);          // Max along dim 0, shape: (4,)
      * Tensor max_dim0_keep = max(A, 0, true); // Max along dim 0, shape: (1, 4)
      * ```

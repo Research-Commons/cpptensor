@@ -271,10 +271,44 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
 
     cpptensor::Tensor t({2, 3}, {1, 2, 3, 4, 5, 6});
 
-    require_data(t.sum(), {21});
-    require_data(t.mean(), {3.5f});
-    require_data(t.max(), {6});
-    require_data(t.min(), {1});
+    auto global_sum = t.sum();
+    require_shape(global_sum, {});
+    REQUIRE(global_sum.ndim() == 0);
+    require_data(global_sum, {21});
+
+    auto global_mean = t.mean();
+    require_shape(global_mean, {});
+    REQUIRE(global_mean.ndim() == 0);
+    require_data(global_mean, {3.5f});
+
+    auto global_max = t.max();
+    require_shape(global_max, {});
+    REQUIRE(global_max.ndim() == 0);
+    require_data(global_max, {6});
+
+    auto global_min = t.min();
+    require_shape(global_min, {});
+    REQUIRE(global_min.ndim() == 0);
+    require_data(global_min, {1});
+
+    require_shape(t.sum(true), {1, 1});
+    require_data(t.sum(true), {21});
+    require_shape(t.mean(true), {1, 1});
+    require_data(t.mean(true), {3.5f});
+    require_shape(t.max(true), {1, 1});
+    require_data(t.max(true), {6});
+    require_shape(t.min(true), {1, 1});
+    require_data(t.min(true), {1});
+
+    cpptensor::Tensor v({3}, {1, 2, 3});
+    require_shape(v.sum(0), {});
+    require_data(v.sum(0), {6});
+    require_shape(v.mean(0), {});
+    require_data(v.mean(0), {2});
+    require_shape(v.max(0), {});
+    require_data(v.max(0), {3});
+    require_shape(v.min(0), {});
+    require_data(v.min(0), {1});
 
     require_shape(t.sum(0), {3});
     require_data(t.sum(0), {5, 7, 9});
@@ -315,6 +349,22 @@ TEST_CASE("contiguous honors raw-pointer-backed view offsets", "[tensor][contigu
     REQUIRE_FALSE(stepped.is_contiguous());
     require_shape(materialized, {2});
     require_data(materialized, {1, 3});
+}
+
+TEST_CASE("pointer-backed views expose logical const data and reject mutable storage",
+          "[tensor][data][from_ptr]") {
+    cpptensor::Tensor owner({6}, {0, 1, 2, 3, 4, 5});
+    auto subrange = cpptensor::Tensor::from_ptr(
+        {4},
+        owner.data().data() + 1,
+        owner.impl(),
+        owner.device_type());
+
+    require_shape(subrange, {4});
+    require_data(subrange, {1, 2, 3, 4});
+    REQUIRE_THROWS_WITH(
+        subrange.data(),
+        Catch::Matchers::ContainsSubstring("pointer-backed views"));
 }
 
 TEST_CASE("clone deep-copies sliced views using the logical view contents", "[tensor][clone][view]") {

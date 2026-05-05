@@ -198,7 +198,8 @@ class Tensor {
          * float* slice_ptr = parent.data().data() + (5 * 64 * 64);  // Batch 5
          * Tensor slice = Tensor::from_ptr({64, 64}, slice_ptr,
          *                                  parent.impl(), parent.device_type());
-         * // slice shares data with parent - modifying slice modifies parent
+         * // slice aliases the parent storage for zero-copy reads/internal kernels
+         * // Mutable data() access is intentionally rejected for pointer-backed views
          * ```
          */
         static Tensor from_ptr(const std::vector<size_t>& shape,
@@ -276,9 +277,13 @@ class Tensor {
         // =============== Data Access ===============
 
         /**
-         * @brief Get const reference to underlying data
+         * @brief Get const reference to flattened logical tensor contents
          *
-         * @return Const reference to flattened data vector (row-major order)
+         * For owning tensors and full contiguous views, this exposes the
+         * underlying storage directly. For non-trivial views, it returns a
+         * compact row-major snapshot of the view contents.
+         *
+         * @return Const reference to flattened logical values
          *
          * @warning Direct data access bypasses abstraction. Use carefully.
          *
@@ -291,11 +296,17 @@ class Tensor {
         const std::vector<float>& data() const;
 
         /**
-         * @brief Get mutable reference to underlying data
+         * @brief Get mutable reference to direct backing storage
          *
-         * @return Mutable reference to flattened data vector
+         * Only tensors backed by a single compact storage vector expose mutable
+         * data directly. Non-trivial views throw instead of silently exposing
+         * unrelated base storage.
          *
-         * @warning Modifying data directly may break invariants. Prefer operations.
+         * @return Mutable reference to flattened backing storage
+         *
+         * @warning Modifying data directly may break invariants. Prefer
+         *          operations. Non-trivial views must be materialized with
+         *          contiguous() or clone() first.
          *
          * @example
          * ```cpp
@@ -421,8 +432,9 @@ class Tensor {
          * Tensor C = A.slice(1, -10, -1);        // last 9 cols → shape {10, 9, 30}
          * Tensor D = A.slice(2, 0, std::nullopt, 2);  // every 2nd → shape {10, 20, 15}
          *
-         * // Modifying slice modifies original (zero-copy view)
-         * B.data()[0] = 42.0f;  // Also changes A
+         * // Non-trivial views materialize const data() and reject mutable data()
+         * const auto& logical = B.data();
+         * Tensor B_copy = B.contiguous();  // Compact mutable copy
          * ```
          */
         Tensor slice(int dim,
@@ -547,12 +559,12 @@ class Tensor {
          * Reduces the tensor by summing all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto total = A.sum();         // Global sum, shape [1]
+         * auto total = A.sum();         // Global sum, shape []
          * auto total2 = A.sum(true);    // Global sum with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -586,12 +598,12 @@ class Tensor {
          * Reduces the tensor by computing the mean of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto avg = A.mean();          // Global mean, shape [1]
+         * auto avg = A.mean();          // Global mean, shape []
          * auto avg2 = A.mean(true);     // Global mean with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -625,12 +637,12 @@ class Tensor {
          * Reduces the tensor by finding the maximum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto max_val = A.max();       // Global max, shape [1]
+         * auto max_val = A.max();       // Global max, shape []
          * auto max_val2 = A.max(true);  // Global max with keepdim, shape [1, 1, 1]
          * ```
          */
@@ -664,12 +676,12 @@ class Tensor {
          * Reduces the tensor by finding the minimum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
          *
          * @example
          * ```cpp
          * Tensor A({2, 3, 4}, values);
-         * auto min_val = A.min();       // Global min, shape [1]
+         * auto min_val = A.min();       // Global min, shape []
          * auto min_val2 = A.min(true);  // Global min with keepdim, shape [1, 1, 1]
          * ```
          */

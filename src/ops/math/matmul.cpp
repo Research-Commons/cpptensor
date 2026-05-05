@@ -240,7 +240,6 @@ namespace cpptensor {
             // Check if we can create zero-copy views
             bool A_is_contiguous = is_batch_slice_contiguous(A);
             bool B_is_contiguous = is_batch_slice_contiguous(B);
-
             if (A_is_contiguous) {
                 // Zero-copy view using raw pointer
                 float* A_ptr = const_cast<float*>(raw_data(A) + baseA);

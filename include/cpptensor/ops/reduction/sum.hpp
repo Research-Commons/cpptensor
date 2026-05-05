@@ -20,7 +20,7 @@ namespace cpptensor {
      * ```cpp
      * Tensor A({2, 3, 4}, values);
      *
-     * // Sum all elements -> scalar tensor with shape [1]
+     * // Sum all elements -> scalar tensor with shape []
      * auto total = sum(A);
      *
      * // Sum along dimension 1 -> shape [2, 4]
