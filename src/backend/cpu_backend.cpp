@@ -1,6 +1,7 @@
 #include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
+#include <cmath>
 #include <limits>
 #include <experimental/simd>
 
@@ -159,12 +160,7 @@ void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        float denom = B.data()[idxB];
-        if (denom == 0.0f) {
-            out.data()[pos] = std::numeric_limits<float>::infinity();
-        } else {
-            out.data()[pos] = A.data()[idxA] / denom;
-        }
+        out.data()[pos] = A.data()[idxA] / B.data()[idxB];
     }
 }
 
@@ -221,12 +217,7 @@ void cpptensor::CPU::logKernel(const Tensor& A, Tensor& Out) {
     const std::int64_t n = static_cast<std::int64_t>(Out.numel());
 
     for (std::int64_t i = 0; i < n; ++i) {
-        float val = in_data[i];
-        if (val <= 0.0f) {
-            out_data[i] = -INFINITY;
-        } else {
-            out_data[i] = std::log(val);
-        }
+        out_data[i] = std::log(in_data[i]);
     }
 }
 
@@ -283,12 +274,7 @@ void cpptensor::CPU::sqrtKernel(const Tensor& A, Tensor& Out) {
     const std::int64_t n = static_cast<std::int64_t>(Out.numel());
 
     for (std::int64_t i = 0; i < n; ++i) {
-        float val = in_data[i];
-        if (val < 0.0f) {
-            out_data[i] = std::numeric_limits<float>::quiet_NaN(); // domain error
-        } else {
-            out_data[i] = std::sqrt(val);
-        }
+        out_data[i] = std::sqrt(in_data[i]);
     }
 }
 

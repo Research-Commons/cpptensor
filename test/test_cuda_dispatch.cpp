@@ -2,7 +2,11 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "cpptensor/backend/backend_loader.hpp"
+#include "cpptensor/ops/arithmetic/div.hpp"
+#include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/math/exp.hpp"
+#include "cpptensor/ops/math/log.hpp"
+#include "cpptensor/ops/math/sqrt.hpp"
 #include "cpptensor/tensor/tensor.hpp"
 
 using Catch::Matchers::ContainsSubstring;
@@ -16,6 +20,10 @@ TEST_CASE("CUDA-tagged tensors fail clearly when a binary kernel is unavailable"
 
     REQUIRE_THROWS_WITH(a - b,
                         ContainsSubstring("No forward kernel registered for op Sub on device CUDA"));
+    REQUIRE_THROWS_WITH(a / b,
+                        ContainsSubstring("No forward kernel registered for op Div on device CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::pow(a, b),
+                        ContainsSubstring("No forward kernel registered for op Pow on device CUDA"));
 
 #ifndef BUILD_CUDA
     REQUIRE_THROWS_WITH(a + b,
@@ -43,6 +51,10 @@ TEST_CASE("CUDA-tagged tensors fail clearly when a unary kernel is unavailable",
 
     REQUIRE_THROWS_WITH(cpptensor::exp(a),
                         ContainsSubstring("No unary kernel registered for op Exp on device CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::log(a),
+                        ContainsSubstring("No unary kernel registered for op Log on device CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::sqrt(a),
+                        ContainsSubstring("No unary kernel registered for op Sqrt on device CUDA"));
 }
 
 TEST_CASE("CUDA-tagged tensors fail clearly when a reduction kernel is unavailable",

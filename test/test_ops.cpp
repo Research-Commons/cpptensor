@@ -23,7 +23,9 @@
 #include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/manipulation/stack.hpp"
+#include "cpptensor/ops/math/log.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
+#include "cpptensor/ops/math/sqrt.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
@@ -49,6 +51,35 @@ void require_data(const cpptensor::Tensor& tensor, const std::vector<float>& exp
     REQUIRE(tensor.data().size() == expected.size());
     for (size_t i = 0; i < expected.size(); ++i) {
         REQUIRE(tensor.data()[i] == Approx(expected[i]));
+    }
+}
+
+void require_ieee_value(float actual, float expected) {
+    if (std::isnan(expected)) {
+        REQUIRE(std::isnan(actual));
+        return;
+    }
+
+    if (std::isinf(expected)) {
+        REQUIRE(std::isinf(actual));
+        REQUIRE(std::signbit(actual) == std::signbit(expected));
+        return;
+    }
+
+    if (expected == 0.0f) {
+        REQUIRE(actual == Approx(expected));
+        REQUIRE(std::signbit(actual) == std::signbit(expected));
+        return;
+    }
+
+    REQUIRE(actual == Approx(expected));
+}
+
+void require_ieee_data(const cpptensor::Tensor& tensor, const std::vector<float>& expected) {
+    REQUIRE(tensor.data().size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        INFO("index " << i);
+        require_ieee_value(tensor.data()[i], expected[i]);
     }
 }
 
@@ -866,6 +897,146 @@ TEST_CASE("tensordot matches a naive reference for arbitrary axes and offset vie
     auto offset_actual = cpptensor::tensordot(sliced, rhs, 1);
     require_shape(offset_actual, {2, 3});
     require_data(offset_actual, offset_expected.data());
+}
+
+TEST_CASE("division preserves IEEE divide-by-zero semantics across CPU paths",
+          "[arithmetic][div][ieee]") {
+    cpptensor::initialize_kernels();
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    cpptensor::Tensor numerators({4}, {2.0f, -2.0f, 0.0f, 1.0f});
+    cpptensor::Tensor denominators({4}, {0.0f, 0.0f, 0.0f, -0.0f});
+    std::vector<float> expected = {inf, -inf, nan, -inf};
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_ieee_data(numerators / denominators, expected);
+    }
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        cpptensor::Tensor broadcasted_denominator({1}, std::vector<float>{0.0f});
+        require_ieee_data(
+            numerators / broadcasted_denominator,
+            {inf, -inf, nan, inf});
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_ieee_data(numerators / denominators, expected);
+    }
+#endif
+}
+
+TEST_CASE("log preserves std domain-edge semantics across CPU dispatch paths",
+          "[math][log][domain]") {
+    cpptensor::initialize_kernels();
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    cpptensor::Tensor input(
+        {9},
+        {1.0f, 0.0f, -1.0f, std::exp(1.0f), inf, nan, 0.5f, -0.0f, 2.0f});
+    const std::vector<float> expected = {
+        0.0f,
+        -inf,
+        nan,
+        1.0f,
+        inf,
+        nan,
+        std::log(0.5f),
+        -inf,
+        std::log(2.0f),
+    };
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_ieee_data(cpptensor::log(input), expected);
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_ieee_data(cpptensor::log(input), expected);
+    }
+#endif
+}
+
+TEST_CASE("sqrt preserves std domain-edge semantics across CPU dispatch paths",
+          "[math][sqrt][domain]") {
+    cpptensor::initialize_kernels();
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    cpptensor::Tensor input(
+        {9},
+        {-4.0f, -1.0f, -0.0f, 0.0f, 4.0f, 9.0f, inf, nan, 16.0f});
+    const std::vector<float> expected = {
+        nan,
+        nan,
+        -0.0f,
+        0.0f,
+        2.0f,
+        3.0f,
+        inf,
+        nan,
+        4.0f,
+    };
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_ieee_data(cpptensor::sqrt(input), expected);
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_ieee_data(cpptensor::sqrt(input), expected);
+    }
+#endif
+}
+
+TEST_CASE("pow preserves signed-zero and zero-base edge semantics", "[arithmetic][pow][domain]") {
+    cpptensor::initialize_kernels();
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float neg_zero = -0.0f;
+    const float inf = std::numeric_limits<float>::infinity();
+
+    cpptensor::Tensor base(
+        {9},
+        {-2.0f, -2.0f, 0.0f, 0.0f, neg_zero, neg_zero, neg_zero, neg_zero, 4.0f});
+    cpptensor::Tensor exponent(
+        {9},
+        {2.0f, 0.5f, 0.0f, -1.0f, 3.0f, 2.0f, -3.0f, -2.0f, 0.5f});
+    const std::vector<float> expected = {
+        4.0f,
+        nan,
+        1.0f,
+        inf,
+        neg_zero,
+        0.0f,
+        -inf,
+        inf,
+        2.0f,
+    };
+
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        require_ieee_data(cpptensor::pow(base, exponent), expected);
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        require_ieee_data(cpptensor::pow(base, exponent), expected);
+    }
+#endif
 }
 
 TEST_CASE("pow preserves real-domain results for negative bases", "[arithmetic][pow]") {
