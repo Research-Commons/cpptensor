@@ -47,6 +47,93 @@
 
 using namespace cpptensor;
 
+namespace {
+
+std::vector<float> materialize_matrix(const Tensor& tensor) {
+    const auto& shape = tensor.shape();
+    const auto& stride = tensor.stride();
+    const float* data_ptr = tensor.impl()->data_ptr();
+
+    std::vector<float> matrix(shape[0] * shape[1]);
+    for (size_t row = 0; row < shape[0]; ++row) {
+        for (size_t col = 0; col < shape[1]; ++col) {
+            matrix[row * shape[1] + col] = data_ptr[row * stride[0] + col * stride[1]];
+        }
+    }
+    return matrix;
+}
+
+double frobenius_norm(const std::vector<float>& values) {
+    double sum = 0.0;
+    for (float value : values) {
+        sum += static_cast<double>(value) * static_cast<double>(value);
+    }
+    return std::sqrt(sum);
+}
+
+double svd_relative_reconstruction_error(const Tensor& input, const SVDResult& result) {
+    const auto input_shape = input.shape();
+    const size_t rows = input_shape[0];
+    const size_t cols = input_shape[1];
+    const size_t rank = result.S.shape()[0];
+
+    const auto original = materialize_matrix(input);
+    const auto u = materialize_matrix(result.U);
+    const auto vt = materialize_matrix(result.Vt);
+
+    std::vector<float> reconstructed(rows * cols, 0.0f);
+    for (size_t row = 0; row < rows; ++row) {
+        for (size_t col = 0; col < cols; ++col) {
+            double value = 0.0;
+            for (size_t k = 0; k < rank; ++k) {
+                value += static_cast<double>(u[row * result.U.shape()[1] + k]) *
+                         static_cast<double>(result.S.data()[k]) *
+                         static_cast<double>(vt[k * cols + col]);
+            }
+            reconstructed[row * cols + col] = static_cast<float>(value);
+        }
+    }
+
+    std::vector<float> diff(rows * cols, 0.0f);
+    for (size_t i = 0; i < diff.size(); ++i) {
+        diff[i] = reconstructed[i] - original[i];
+    }
+
+    return frobenius_norm(diff) / std::max(1.0, frobenius_norm(original));
+}
+
+double symmetric_eig_max_residual(const Tensor& input, const EigResult& result) {
+    const auto shape = input.shape();
+    const size_t n = shape[0];
+    const auto a = materialize_matrix(input);
+    const auto vectors = materialize_matrix(result.eigenvectors);
+
+    double max_error = 0.0;
+    for (size_t col = 0; col < n; ++col) {
+        double residual_sq = 0.0;
+        double vector_sq = 0.0;
+        for (size_t row = 0; row < n; ++row) {
+            double av = 0.0;
+            for (size_t inner = 0; inner < n; ++inner) {
+                av += static_cast<double>(a[row * n + inner]) *
+                      static_cast<double>(vectors[inner * n + col]);
+            }
+
+            const double scaled = static_cast<double>(result.eigenvalues.data()[col]) *
+                                  static_cast<double>(vectors[row * n + col]);
+            const double residual = av - scaled;
+            residual_sq += residual * residual;
+            vector_sq += static_cast<double>(vectors[row * n + col]) *
+                         static_cast<double>(vectors[row * n + col]);
+        }
+
+        max_error = std::max(max_error, std::sqrt(residual_sq) / std::max(1.0, std::sqrt(vector_sq)));
+    }
+    return max_error;
+}
+
+} // namespace
+
 // Simple helper for timing
 double benchmark_matmul(int M, int K, int N, int runs = 10) {
     std::cout << "\n===== Benchmark: Matmul (" << M << "x" << K << " × " << K << "x" << N << ") =====" << std::endl;
@@ -548,8 +635,9 @@ int main() {
         std::cout << "  S [2]:    "; S.print();
         std::cout << "  Vt [2×2]: "; Vt.print();
 
-        // Verify reconstruction: A ≈ U @ diag(S) @ Vt
-        // For simplicity, just show singular values are positive and sorted
+        const auto reconstruction_error = svd_relative_reconstruction_error(A, {U, S, Vt});
+        std::cout << "  Relative reconstruction error ||A-UΣVᵀ||/||A||: "
+                  << reconstruction_error << "\n";
         std::cout << "  Singular values (should be positive, descending): ";
         for (size_t i = 0; i < S.shape()[0]; ++i) {
             std::cout << S.data()[i] << " ";
@@ -564,6 +652,12 @@ int main() {
         std::cout << "  U [4×3]:  shape = [" << result.U.shape()[0] << "×" << result.U.shape()[1] << "]\n";
         std::cout << "  S [3]:    "; result.S.print();
         std::cout << "  Vt [3×3]: shape = [" << result.Vt.shape()[0] << "×" << result.Vt.shape()[1] << "]\n";
+
+        Tensor At = A.transpose();
+        auto transposed_result = cpptensor::svd(At, false, true);
+        std::cout << "  Transposed view accepted (non-contiguous input is copied to a row-major workspace).\n";
+        std::cout << "  View reconstruction error: "
+                  << svd_relative_reconstruction_error(At, transposed_result) << "\n";
     }
     {
         // Only compute singular values (fastest)
@@ -597,7 +691,9 @@ int main() {
         vals.print();
         std::cout << "Eigenvectors (columns):\n";
         vecs.print();
-        std::cout << "(All eigenvalues are real for symmetric matrices)\n";
+        std::cout << "Max residual ||Av-λv||/||v||: "
+                  << symmetric_eig_max_residual(A, {vals, vals_im, vecs}) << "\n";
+        std::cout << "(All eigenvalues are real for symmetric matrices and are returned ascending.)\n";
     }
     {
         // General matrix with real eigenvalues
@@ -613,6 +709,7 @@ int main() {
         vals_re.print();
         std::cout << "Eigenvalues (imag): ";
         vals_im.print();
+        std::cout << "(General eig values are returned in LAPACK order; cpptensor does not re-sort them.)\n";
     }
     {
         // General matrix with complex eigenvalues
@@ -627,7 +724,7 @@ int main() {
         vals_re.print();
         std::cout << "Eigenvalues (imag): ";
         vals_im.print();
-        std::cout << "(Complex eigenvalues: ±i)\n";
+        std::cout << "(Complex eigenvalues: ±i, with conjugate eigenvectors packed in adjacent columns.)\n";
     }
 #else
     std::cout << "\n===== EIG not available (requires OpenBLAS) =====\n";
@@ -2542,4 +2639,3 @@ int main() {
 
     return 0;
 }
-

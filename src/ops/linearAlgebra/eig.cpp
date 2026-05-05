@@ -1,14 +1,34 @@
 #include "cpptensor/ops/linearAlgebra/eig.hpp"
-#include <stdexcept>
 #include <algorithm>
-#include <cstring>
+#include <string>
+#include <stdexcept>
+#include <vector>
 
 #ifdef USE_OPENBLAS
-// Use LAPACKE (C interface) which supports row-major layout directly
 #include <lapacke.h>
 #endif
 
 namespace cpptensor {
+namespace {
+
+std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
+    const auto& shape = matrix.shape();
+    const auto& stride = matrix.stride();
+    const float* data_ptr = matrix.impl()->data_ptr();
+
+    const size_t rows = shape[0];
+    const size_t cols = shape[1];
+
+    std::vector<float> buffer(rows * cols);
+    for (size_t row = 0; row < rows; ++row) {
+        for (size_t col = 0; col < cols; ++col) {
+            buffer[row * cols + col] = data_ptr[row * stride[0] + col * stride[1]];
+        }
+    }
+    return buffer;
+}
+
+} // namespace
 
 EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
     // ===== Step 1: Validate Input =====
@@ -33,19 +53,10 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
     }
 
 #ifdef USE_OPENBLAS
-    // ===== Step 2: Prepare Input =====
-    // LAPACKE_ssyevd destroys the input matrix and returns eigenvectors in it
-    std::vector<float> a_copy = A.data();
+    std::vector<float> a_copy = copy_matrix_to_row_major_buffer(A);
 
-    // ===== Step 3: Allocate Output =====
-    std::vector<float> w(N);  // Eigenvalues
+    std::vector<float> w(N);
 
-    // ===== Step 4: Compute Eigenvalues/Eigenvectors =====
-    // LAPACKE_ssyevd: symmetric eigenvalue decomposition (divide-and-conquer)
-    // This is 2-10× faster than ssyev for matrices larger than ~100×100
-    // - 'V' = compute eigenvectors, 'N' = eigenvalues only
-    // - 'U' = use upper triangle of matrix
-    // - Matrix is overwritten with eigenvectors (column-wise)
     char jobz = compute_eigenvectors ? 'V' : 'N';
 
     int info = LAPACKE_ssyevd(
@@ -58,7 +69,6 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
         w.data()              // Output eigenvalues
     );
 
-    // ===== Step 5: Check for Errors =====
     if (info < 0) {
         throw std::runtime_error("eig_symmetric: LAPACKE_ssyevd illegal argument at position " +
                                 std::to_string(-info));
@@ -67,13 +77,8 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
                                 std::to_string(info) + " off-diagonal elements did not converge to zero");
     }
 
-    // ===== Step 6: Construct Result =====
     EigResult result;
-
-    // Eigenvalues (always computed)
     result.eigenvalues = Tensor({static_cast<size_t>(N)}, w, DeviceType::CPU);
-
-    // Eigenvectors (if requested)
     if (compute_eigenvectors) {
         result.eigenvectors = Tensor({static_cast<size_t>(N), static_cast<size_t>(N)},
                                      a_copy, DeviceType::CPU);
@@ -81,9 +86,7 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
         result.eigenvectors = Tensor({0, 0}, std::vector<float>{}, DeviceType::CPU);
     }
 
-    // Imaginary part is empty for symmetric case (eigenvalues are always real)
     result.eigenvalues_imag = Tensor({0}, std::vector<float>{}, DeviceType::CPU);
-
     return result;
 
 #else
@@ -119,38 +122,31 @@ EigResult eig(const Tensor& A, bool compute_eigenvectors) {
     }
 
 #ifdef USE_OPENBLAS
-    // ===== Step 2: Prepare Input =====
-    std::vector<float> a_copy = A.data();
+    std::vector<float> a_copy = copy_matrix_to_row_major_buffer(A);
 
-    // ===== Step 3: Allocate Output =====
-    std::vector<float> wr(N);   // Real part of eigenvalues
-    std::vector<float> wi(N);   // Imaginary part of eigenvalues
-    std::vector<float> vl(1);   // Left eigenvectors (not computed)
-    std::vector<float> vr(compute_eigenvectors ? N * N : 1);  // Right eigenvectors
+    std::vector<float> wr(N);
+    std::vector<float> wi(N);
+    std::vector<float> vl(1);
+    std::vector<float> vr(compute_eigenvectors ? N * N : 1);
 
-    // ===== Step 4: Compute Eigenvalues/Eigenvectors =====
-    // LAPACKE_sgeev: general eigenvalue decomposition
-    // - First 'N' = don't compute left eigenvectors
-    // - Second 'V'/'N' = compute/don't compute right eigenvectors
-    char jobvl = 'N';  // Don't compute left eigenvectors
-    char jobvr = compute_eigenvectors ? 'V' : 'N';  // Compute right eigenvectors
+    char jobvl = 'N';
+    char jobvr = compute_eigenvectors ? 'V' : 'N';
 
     int info = LAPACKE_sgeev(
-        LAPACK_ROW_MAJOR,     // Row-major layout
-        jobvl,                // Left eigenvectors: 'N' = don't compute
-        jobvr,                // Right eigenvectors: 'V' = compute, 'N' = don't
-        N,                    // Matrix dimension
-        a_copy.data(),        // Input matrix (destroyed on output)
-        N,                    // Leading dimension of A
-        wr.data(),            // Real part of eigenvalues
-        wi.data(),            // Imaginary part of eigenvalues
-        vl.data(),            // Left eigenvectors (not used)
-        1,                    // Leading dimension of VL
-        vr.data(),            // Right eigenvectors
-        compute_eigenvectors ? N : 1  // Leading dimension of VR
+        LAPACK_ROW_MAJOR,
+        jobvl,
+        jobvr,
+        N,
+        a_copy.data(),
+        N,
+        wr.data(),
+        wi.data(),
+        vl.data(),
+        1,
+        vr.data(),
+        compute_eigenvectors ? N : 1
     );
 
-    // ===== Step 5: Check for Errors =====
     if (info < 0) {
         throw std::runtime_error("eig: LAPACKE_sgeev illegal argument at position " +
                                 std::to_string(-info));
@@ -159,14 +155,9 @@ EigResult eig(const Tensor& A, bool compute_eigenvectors) {
                                 "The QR algorithm failed to compute all eigenvalues");
     }
 
-    // ===== Step 6: Construct Result =====
     EigResult result;
-
-    // Eigenvalues (always computed)
     result.eigenvalues = Tensor({static_cast<size_t>(N)}, wr, DeviceType::CPU);
     result.eigenvalues_imag = Tensor({static_cast<size_t>(N)}, wi, DeviceType::CPU);
-
-    // Eigenvectors (if requested)
     if (compute_eigenvectors) {
         result.eigenvectors = Tensor({static_cast<size_t>(N), static_cast<size_t>(N)},
                                      vr, DeviceType::CPU);

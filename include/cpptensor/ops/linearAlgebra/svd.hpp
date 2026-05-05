@@ -12,7 +12,7 @@ namespace cpptensor {
      * For matrix A [M×N], the SVD is: A = U * diag(S) * V^T
      * where:
      *   - U:  Left singular vectors (orthonormal columns)
-     *   - S:  Singular values (non-negative, sorted descending)
+     *   - S:  Singular values (non-negative, sorted in descending order)
      *   - Vt: Right singular vectors transposed (orthonormal rows)
      */
     struct SVDResult {
@@ -26,8 +26,10 @@ namespace cpptensor {
      *
      * Computes the SVD of a 2D matrix: A = U * diag(S) * V^T
      *
-     * Uses LAPACK's sgesvd routine (requires OpenBLAS/LAPACK).
-     * Falls back to error if LAPACK is not available.
+     * Uses LAPACK's divide-and-conquer `sgesdd` routine when OpenBLAS/LAPACK
+     * is available. The input is read in logical row-major order; non-contiguous
+     * CPU views such as transpose/slice inputs are copied into an internal
+     * contiguous workspace before calling LAPACK.
      *
      * @param A Input matrix [M×N], must be 2D
      * @param full_matrices
@@ -45,7 +47,13 @@ namespace cpptensor {
      *         - Input is not 2D
      *         - Input is not on CPU
      *         - LAPACK is not available (build with -DUSE_OPENBLAS=ON)
-     *         - SVD computation fails
+     *         - LAPACK reports an illegal argument
+     *         - LAPACK fails to converge
+     *
+     * @note `S` is returned in descending order, following LAPACK semantics.
+     * @note When `full_matrices=true`, the reconstruction uses the leading
+     *       `min(M, N)` columns of `U` and leading `min(M, N)` rows of `Vt`.
+     * @note `U` and `Vt` are empty `{0, 0}` tensors when `compute_uv=false`.
      *
      * @example
      *   Tensor A = Tensor::randn({100, 50});
