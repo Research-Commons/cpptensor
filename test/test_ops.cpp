@@ -696,6 +696,31 @@ TEST_CASE("contiguous copies non-contiguous view values from the logical offset"
     require_data(materialized, {1, 3});
 }
 
+TEST_CASE("unary negation preserves logical view contents", "[arithmetic][neg][views]") {
+    cpptensor::Tensor vector({4}, {0, 1, 2, 3});
+    auto sliced = vector.slice(0, 1, 4, 2);
+    auto neg_sliced = -sliced;
+
+    REQUIRE_FALSE(sliced.is_contiguous());
+    require_shape(neg_sliced, {2});
+    require_data(neg_sliced, {-1, -3});
+
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+    auto transposed = matrix.transpose();
+    auto neg_transposed = -transposed;
+
+    REQUIRE_FALSE(transposed.is_contiguous());
+    require_shape(neg_transposed, {3, 2});
+    require_data(neg_transposed, {-1, -4, -2, -5, -3, -6});
+
+    cpptensor::Tensor base({2, 3}, {1, 2, 3, 4, 5, 6});
+    auto unsqueezed = base.unsqueeze(1);
+    auto neg_unsqueezed = -unsqueezed;
+
+    require_shape(neg_unsqueezed, {2, 1, 3});
+    require_data(neg_unsqueezed, {-1, -2, -3, -4, -5, -6});
+}
+
 TEST_CASE("tensordot reuses direct and transposed views for common layouts", "[tensordot]") {
     cpptensor::Tensor a({2, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8});
     cpptensor::Tensor b({2, 3}, {1, 0, 1, 0, 1, 1});
