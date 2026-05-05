@@ -177,3 +177,26 @@ TEST_CASE("contiguous honors raw-pointer-backed view offsets", "[tensor][contigu
     require_shape(materialized, {2});
     require_data(materialized, {1, 3});
 }
+
+TEST_CASE("clone deep-copies sliced views using the logical view contents", "[tensor][clone][view]") {
+    cpptensor::Tensor base({4}, {0, 1, 2, 3});
+
+    auto sliced = base.slice(0, 1, 3);
+    auto cloned = sliced.clone();
+
+    require_shape(cloned, {2});
+    require_data(cloned, {1, 2});
+
+    base.data()[1] = 99.0f;
+    require_data(cloned, {1, 2});
+}
+
+TEST_CASE("clone preserves the logical order of transposed views", "[tensor][clone][view]") {
+    cpptensor::Tensor matrix({2, 2}, {1, 2, 3, 4});
+
+    auto transposed = matrix.transpose(0, 1);
+    auto cloned = transposed.clone();
+
+    require_shape(cloned, {2, 2});
+    require_data(cloned, {1, 3, 2, 4});
+}

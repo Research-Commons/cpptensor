@@ -530,7 +530,8 @@ class Tensor {
         /**
          * @brief Create deep copy of tensor
          *
-         * Creates a new tensor with its own data buffer (no sharing).
+         * Creates a new tensor with its own data buffer (no sharing),
+         * preserving the current tensor's logical contents even for views.
          *
          * @return Independent copy of the tensor
          */
