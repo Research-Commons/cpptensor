@@ -248,6 +248,21 @@ TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][
     require_data(neg_dim, dim1.data());
 }
 
+TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
+          "[manipulation][cat][device]") {
+    cpptensor::Tensor cuda_a({2}, {1, 2}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_b({2}, {3, 4}, DeviceType::CUDA);
+
+    auto cuda_result = cpptensor::cat({cuda_a, cuda_b}, 0);
+    require_shape(cuda_result, {4});
+    require_data(cuda_result, {1, 2, 3, 4});
+    REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
+
+    cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
+    REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("same device"));
+}
+
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     cpptensor::Tensor a({2, 2}, {1, 2, 3, 4});
     cpptensor::Tensor b({2, 2}, {5, 6, 7, 8});
@@ -263,6 +278,21 @@ TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
     auto dim2 = cpptensor::stack({a, b}, 2);
     require_shape(dim2, {2, 2, 2});
     require_data(dim2, {1, 5, 2, 6, 3, 7, 4, 8});
+}
+
+TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
+          "[manipulation][stack][device]") {
+    cpptensor::Tensor cuda_a({2}, {1, 2}, DeviceType::CUDA);
+    cpptensor::Tensor cuda_b({2}, {3, 4}, DeviceType::CUDA);
+
+    auto cuda_result = cpptensor::stack({cuda_a, cuda_b}, 0);
+    require_shape(cuda_result, {2, 2});
+    require_data(cuda_result, {1, 2, 3, 4});
+    REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
+
+    cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
+    REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("same device"));
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
