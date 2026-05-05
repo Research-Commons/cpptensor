@@ -17,6 +17,7 @@
 #include "cpptensor/ops/comparison/gt.hpp"
 #include "cpptensor/ops/comparison/le.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
+#include "cpptensor/ops/math/exp.hpp"
 #include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/comparison/lt.hpp"
 #include "cpptensor/ops/comparison/ne.hpp"
@@ -265,6 +266,37 @@ void require_broadcast_arithmetic_results() {
     require_data(tensor3d - vector, sub_expected);
     require_data(tensor3d * vector, mul_expected);
     require_data(tensor3d / vector, div_expected);
+}
+
+void require_view_kernel_results_match_logical_layout() {
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+    auto added = matrix.transpose() + cpptensor::Tensor::zeros({3, 2});
+    require_shape(added, {3, 2});
+    require_data(added, {1, 4, 2, 5, 3, 6});
+
+    cpptensor::Tensor cube({2, 2, 2}, {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f});
+    auto permuted = cube.permute({1, 2, 0});
+    auto exponentiated = cpptensor::exp(permuted);
+    std::vector<float> exp_expected;
+    for (float value : std::vector<float>{0.1f, 0.5f, 0.2f, 0.6f, 0.3f, 0.7f, 0.4f, 0.8f}) {
+        exp_expected.push_back(std::exp(value));
+    }
+    require_shape(exponentiated, {2, 2, 2});
+    REQUIRE(exponentiated.data().size() == exp_expected.size());
+    for (size_t i = 0; i < exp_expected.size(); ++i) {
+        REQUIRE(exponentiated.data()[i] == Approx(exp_expected[i]).epsilon(0.1));
+    }
+
+    cpptensor::Tensor sliced_source({2, 4}, {1, 2, 3, 4, 5, 6, 7, 8});
+    auto sliced = sliced_source.slice(1, 1, 4, 2);
+
+    auto summed = sliced.sum(0);
+    require_shape(summed, {2});
+    require_data(summed, {8, 12});
+
+    auto maxed = sliced.max(1);
+    require_shape(maxed, {2});
+    require_data(maxed, {4, 8});
 }
 
 TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][cat]") {
@@ -957,3 +989,19 @@ TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[
     REQUIRE(out.data()[8] == Approx(81.0f));
 }
 #endif
+
+
+TEST_CASE("backend kernels respect logical layouts for non-contiguous views",
+          "[ops][views][backend]") {
+    SECTION("generic kernels") {
+        ScopedCpuIsaOverride isa_override("generic");
+        require_view_kernel_results_match_logical_layout();
+    }
+
+#ifdef BUILD_AVX2
+    SECTION("avx2 kernels") {
+        ScopedCpuIsaOverride isa_override("avx2");
+        require_view_kernel_results_match_logical_layout();
+    }
+#endif
+}

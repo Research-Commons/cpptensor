@@ -1,6 +1,7 @@
 #include "cpptensor/ops/reduction/min.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
+#include "cpptensor/ops/helperOps.hpp"
 
 #include <stdexcept>
 
@@ -41,6 +42,7 @@ namespace cpptensor {
 
         // Create output tensor
         Tensor output = Tensor::zeros(out_shape, input.device_type());
+        const Tensor prepared_input = materialize_for_backend_input(input);
 
         // Dispatch to appropriate backend kernel
         auto& registry = KernelRegistry::instance();
@@ -55,7 +57,7 @@ namespace cpptensor {
         }
 
         // Execute kernel
-        kernel(input, output, dim, keepdim);
+        kernel(prepared_input, output, dim, keepdim);
 
         return output;
     }

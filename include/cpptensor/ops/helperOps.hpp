@@ -35,6 +35,13 @@ inline const char* deviceTypeName(DeviceType device) {
     return "Unknown";
 }
 
+inline Tensor materialize_for_backend_input(const Tensor& tensor) {
+    if (tensor.is_contiguous()) {
+        return tensor;
+    }
+    return tensor.contiguous();
+}
+
 // Helper: compute broadcasted output shape for two input shapes.
 inline std::vector<size_t> computeBroadcastShape(const std::vector<size_t>& a,
                                                  const std::vector<size_t>& b) {
@@ -108,11 +115,13 @@ inline Tensor dispatchBinaryOp(const Tensor& lhs,
                                CpuBroadcastKernel&& cpu_broadcast_kernel) {
     const BinaryOpContext context = prepareBinaryOp(lhs, rhs);
     Tensor out = allocateBinaryOpOutput(context);
+    const Tensor prepared_lhs = materialize_for_backend_input(lhs);
+    const Tensor prepared_rhs = materialize_for_backend_input(rhs);
 
     if (context.use_cpu_broadcast_kernel) {
-        std::forward<CpuBroadcastKernel>(cpu_broadcast_kernel)(lhs, rhs, out);
+        std::forward<CpuBroadcastKernel>(cpu_broadcast_kernel)(prepared_lhs, prepared_rhs, out);
     } else {
-        KernelRegistry::instance().getKernel(op, context.device)(lhs, rhs, out);
+        KernelRegistry::instance().getKernel(op, context.device)(prepared_lhs, prepared_rhs, out);
     }
 
     return out;

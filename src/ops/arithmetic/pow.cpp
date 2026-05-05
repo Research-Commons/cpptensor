@@ -1,6 +1,7 @@
 #include "ops/arithmetic/pow.hpp"
 #include "dispatcher/kernelRegistry.h"
 #include "tensor/tensor.hpp"
+#include "cpptensor/ops/helperOps.hpp"
 
 namespace cpptensor {
 
@@ -13,8 +14,10 @@ namespace cpptensor {
         }
 
         Tensor out = Tensor::full(base.shape(), 0.0f, base.device_type());
+        const Tensor prepared_base = materialize_for_backend_input(base);
+        const Tensor prepared_exponent = materialize_for_backend_input(exponent);
 
-        KernelRegistry::instance().getKernel(OpType::Pow, base.device_type())(base, exponent, out);
+        KernelRegistry::instance().getKernel(OpType::Pow, base.device_type())(prepared_base, prepared_exponent, out);
 
         return out;
     }
