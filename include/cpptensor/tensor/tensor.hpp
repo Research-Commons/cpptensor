@@ -440,6 +440,8 @@ class Tensor {
          * Tensor A({2, 1, 3, 1}, ...);
          * Tensor B = A.squeeze();      // Shape: {2, 3}
          * Tensor C = A.squeeze(1);     // Shape: {2, 3, 1}
+         * Tensor D({1}, ...);
+         * Tensor E = D.squeeze();      // Shape: {}
          * ```
          */
         Tensor squeeze(int dim = -1) const;
