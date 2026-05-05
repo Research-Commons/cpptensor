@@ -1,6 +1,5 @@
 #include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
-#include "cpptensor/utils/broadcastUtils.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <numeric>
@@ -23,13 +22,6 @@ namespace cpptensor {
         return out;
     }
 
-    static std::vector<size_t> gather(const std::vector<size_t>& v, const std::vector<int>& idxs) {
-        std::vector<size_t> r;
-        r.reserve(idxs.size());
-        for (int i : idxs) r.push_back(v[static_cast<size_t>(i)]);
-        return r;
-    }
-
     static std::vector<int> complement_axes(size_t rank, const std::vector<int>& axes) {
         std::vector<int> all(rank);
         std::iota(all.begin(), all.end(), 0);
@@ -43,56 +35,92 @@ namespace cpptensor {
         return rest;
     }
 
-    static Tensor permute_copy(const Tensor& T, const std::vector<int>& perm) {
-        const auto& sh = T.shape();
-        size_t rank = sh.size();
-        if (perm.size() != rank) throw std::runtime_error("permute_copy: bad perm size");
-
-        // compute output shape
-        std::vector<size_t> out_shape(rank);
-        for (size_t i = 0; i < rank; ++i) out_shape[i] = sh[static_cast<size_t>(perm[i])];
-
-        // strides
-        auto in_stride = T.stride();
-        auto out_stride = compute_strides(out_shape);
-
-        // map each output position to input offset
-        size_t total = 1; for (auto d : out_shape) total *= d;
-        std::vector<float> out_data(total);
-
-        // // Memory usage warning for large tensors (>100MB per copy)
-        // constexpr size_t WARN_THRESHOLD = 100 * 1024 * 1024 / sizeof(float); // ~25M elements
-        // if (total > WARN_THRESHOLD) {
-        //
-        // }
-
-        for (size_t pos = 0; pos < total; ++pos) {
-            // decode pos into out multi-index
-            size_t tmp = pos;
-            size_t in_off = 0;
-            for (size_t od = 0; od < rank; ++od) {
-                size_t coord = tmp / out_stride[od];
-                tmp = tmp % out_stride[od];
-                size_t id = static_cast<size_t>(perm[od]);
-                in_off += coord * in_stride[id];
-            }
-            out_data[pos] = T.data()[in_off];
-        }
-
-        return Tensor(out_shape, out_data, T.device_type());
-    }
-
     // Collapse a list of dims to their product
     static size_t prod(const std::vector<size_t>& v) {
         size_t p = 1; for (auto x : v) p *= x; return p;
     }
 
-    // Reshape as a view (no copy) - just wraps same data with new shape
-    static Tensor reshape_view(const Tensor& T, const std::vector<size_t>& new_shape) {
-        if (T.numel() != prod(new_shape))
-            throw std::runtime_error("reshape_view: numel mismatch");
-        // Create tensor with same data pointer, new shape
-        return Tensor(new_shape, T.data(), T.device_type());
+    static bool is_prefix_axes(const std::vector<int>& axes) {
+        for (size_t i = 0; i < axes.size(); ++i) {
+            if (axes[i] != static_cast<int>(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool is_suffix_axes(const std::vector<int>& axes, size_t rank) {
+        const size_t suffix_start = rank - axes.size();
+        for (size_t i = 0; i < axes.size(); ++i) {
+            if (axes[i] != static_cast<int>(suffix_start + i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    enum class MatrixPrepKind {
+        DirectView,
+        TransposedView,
+        Materialize
+    };
+
+    struct MatrixPrepPlan {
+        MatrixPrepKind kind;
+        std::vector<int> permutation;
+        size_t rows;
+        size_t cols;
+    };
+
+    static MatrixPrepPlan plan_left_matrix(const std::vector<int>& axesA,
+                                           const std::vector<int>& A_rest,
+                                           size_t rank,
+                                           size_t M,
+                                           size_t K) {
+        if (is_suffix_axes(axesA, rank)) {
+            return {MatrixPrepKind::DirectView, {}, M, K};
+        }
+        if (is_prefix_axes(axesA)) {
+            return {MatrixPrepKind::TransposedView, {}, M, K};
+        }
+
+        std::vector<int> perm = A_rest;
+        perm.insert(perm.end(), axesA.begin(), axesA.end());
+        return {MatrixPrepKind::Materialize, std::move(perm), M, K};
+    }
+
+    static MatrixPrepPlan plan_right_matrix(const std::vector<int>& axesB,
+                                            const std::vector<int>& B_rest,
+                                            size_t rank,
+                                            size_t K,
+                                            size_t N) {
+        if (is_prefix_axes(axesB)) {
+            return {MatrixPrepKind::DirectView, {}, K, N};
+        }
+        if (is_suffix_axes(axesB, rank)) {
+            return {MatrixPrepKind::TransposedView, {}, K, N};
+        }
+
+        std::vector<int> perm = axesB;
+        perm.insert(perm.end(), B_rest.begin(), B_rest.end());
+        return {MatrixPrepKind::Materialize, std::move(perm), K, N};
+    }
+
+    static Tensor prepare_matrix(const Tensor& input, const MatrixPrepPlan& plan) {
+        if (!input.is_contiguous() && plan.kind != MatrixPrepKind::Materialize) {
+            return prepare_matrix(input.contiguous(), plan);
+        }
+
+        switch (plan.kind) {
+            case MatrixPrepKind::DirectView:
+                return input.view({plan.rows, plan.cols});
+            case MatrixPrepKind::TransposedView:
+                return input.view({plan.cols, plan.rows}).transpose();
+            case MatrixPrepKind::Materialize:
+                return input.permute(plan.permutation).contiguous().view({plan.rows, plan.cols});
+        }
+
+        throw std::runtime_error("tensordot: unknown matrix preparation plan");
     }
 
     Tensor tensordot(const Tensor& A, const Tensor& B, int axes) {
@@ -142,39 +170,45 @@ namespace cpptensor {
         auto A_rest = complement_axes(ra, axesA);
         auto B_rest = complement_axes(rb, axesB);
 
-        std::vector<int> permA = A_rest; permA.insert(permA.end(), axesA.begin(), axesA.end());
-        std::vector<int> permB = axesB;  permB.insert(permB.end(), B_rest.begin(), B_rest.end());
+        std::vector<size_t> A_rest_sh;
+        A_rest_sh.reserve(A_rest.size());
+        for (int axis : A_rest) {
+            A_rest_sh.push_back(Ash[static_cast<size_t>(axis)]);
+        }
 
-        // Permute to [A_rest..., K...] and [K..., B_rest...]
-        Tensor Ap = permute_copy(A, permA);
-        Tensor Bp = permute_copy(B, permB);
+        std::vector<size_t> A_k_sh;
+        A_k_sh.reserve(axesA.size());
+        for (int axis : axesA) {
+            A_k_sh.push_back(Ash[static_cast<size_t>(axis)]);
+        }
 
-        // Shapes
-        auto Ap_sh = Ap.shape();
-        auto Bp_sh = Bp.shape();
+        std::vector<size_t> B_rest_sh;
+        B_rest_sh.reserve(B_rest.size());
+        for (int axis : B_rest) {
+            B_rest_sh.push_back(Bsh[static_cast<size_t>(axis)]);
+        }
 
-        std::vector<size_t> A_rest_sh(A_rest.size());
-        for (size_t i = 0; i < A_rest.size(); ++i) A_rest_sh[i] = Ap_sh[i];
-        std::vector<size_t> A_k_sh(Ap_sh.begin() + A_rest.size(), Ap_sh.end());
-
-        std::vector<size_t> B_k_sh(axesB.size());
-        for (size_t i = 0; i < axesB.size(); ++i) B_k_sh[i] = Bp_sh[i];
-        std::vector<size_t> B_rest_sh(Bp_sh.begin() + axesB.size(), Bp_sh.end());
+        std::vector<size_t> B_k_sh;
+        B_k_sh.reserve(axesB.size());
+        for (int axis : axesB) {
+            B_k_sh.push_back(Bsh[static_cast<size_t>(axis)]);
+        }
 
         size_t M = prod(A_rest_sh);
         size_t K = prod(A_k_sh); // == prod(B_k_sh)
         size_t N = prod(B_rest_sh);
 
-        // Reshape to 2D and GEMM
-        Tensor A2D = reshape_view(Ap, {M, K});
-        Tensor B2D = reshape_view(Bp, {K, N});
+        MatrixPrepPlan left_plan = plan_left_matrix(axesA, A_rest, ra, M, K);
+        MatrixPrepPlan right_plan = plan_right_matrix(axesB, B_rest, rb, K, N);
+
+        Tensor A2D = prepare_matrix(A, left_plan);
+        Tensor B2D = prepare_matrix(B, right_plan);
         Tensor C2D = matmul(A2D, B2D); // uses existing kernels and batching
 
         // Reshape back to A_rest + B_rest
         std::vector<size_t> out_shape = A_rest_sh;
         out_shape.insert(out_shape.end(), B_rest_sh.begin(), B_rest_sh.end());
-        Tensor Out = reshape_view(C2D, out_shape);
-        return Out;
+        return C2D.view(out_shape);
     }
 
 } // namespace cpptensor

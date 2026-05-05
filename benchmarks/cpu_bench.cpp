@@ -8,6 +8,7 @@
 #include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/arithmetic/sub.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
+#include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/math/cos.hpp"
 #include "cpptensor/ops/math/log.hpp"
@@ -162,6 +163,33 @@ static void BM_Dot_CPU(benchmark::State& state) {
     }
 }
 
+static void BM_Tensordot_Direct3D_CPU(benchmark::State& state) {
+    Tensor A = Tensor::full({64, 128, 256}, 1.0f, DeviceType::CPU);
+    Tensor B = Tensor::full({256, 96, 64}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::tensordot(A, B, 1);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Tensordot_Direct4D_CPU(benchmark::State& state) {
+    Tensor A = Tensor::full({16, 32, 64, 128}, 1.0f, DeviceType::CPU);
+    Tensor B = Tensor::full({64, 128, 32, 16}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::tensordot(A, B, 2);
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Tensordot_Shuffled4D_CPU(benchmark::State& state) {
+    Tensor A = Tensor::full({16, 24, 32, 48}, 1.0f, DeviceType::CPU);
+    Tensor B = Tensor::full({32, 16, 48, 20}, 1.0f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = cpptensor::tensordot(A, B, {0, 2}, {1, 0});
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 // Reduction Operations
 static void BM_Sum_CPU(benchmark::State& state) {
     KernelRegistry::instance().registerReductionKernel(OpType::Sum, DeviceType::CPU, CPU::sumKernel);
@@ -249,6 +277,9 @@ BENCHMARK(BM_Sigmoid_CPU);
 BENCHMARK(BM_Relu_CPU);
 BENCHMARK(BM_Matmul_CPU);
 BENCHMARK(BM_Dot_CPU);
+BENCHMARK(BM_Tensordot_Direct3D_CPU);
+BENCHMARK(BM_Tensordot_Direct4D_CPU);
+BENCHMARK(BM_Tensordot_Shuffled4D_CPU);
 BENCHMARK(BM_Sum_CPU);
 BENCHMARK(BM_Sum_Dim_CPU);
 BENCHMARK(BM_Mean_CPU);

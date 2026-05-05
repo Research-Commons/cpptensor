@@ -18,6 +18,14 @@ namespace cpptensor {
     // =============== Helper Functions for Optimization ===============
 
     namespace {
+        const float* raw_data(const Tensor& T) {
+            return T.impl()->data_ptr();
+        }
+
+        float* raw_data(Tensor& T) {
+            return T.impl()->data_ptr();
+        }
+
         /**
          * @brief Check if tensor represents a transposed view
          *
@@ -50,6 +58,22 @@ namespace cpptensor {
             if (st[ndim-2] != sh[ndim-1]) return false;
 
             return true;
+        }
+
+        Tensor copy_matrix_slice(const Tensor& T, size_t base_offset, size_t rows, size_t cols) {
+            const auto& st = T.stride();
+            const size_t row_stride = st[st.size() - 2];
+            const size_t col_stride = st[st.size() - 1];
+            const float* src = raw_data(T);
+
+            std::vector<float> block(rows * cols);
+            for (size_t r = 0; r < rows; ++r) {
+                for (size_t c = 0; c < cols; ++c) {
+                    block[r * cols + c] = src[base_offset + r * row_stride + c * col_stride];
+                }
+            }
+
+            return Tensor({rows, cols}, block, T.device_type());
         }
     }
 
@@ -219,33 +243,25 @@ namespace cpptensor {
 
             if (A_is_contiguous) {
                 // Zero-copy view using raw pointer
-                float* A_ptr = const_cast<float*>(A.data().data() + baseA);
+                float* A_ptr = const_cast<float*>(raw_data(A) + baseA);
                 A2D = Tensor::from_ptr({M, K}, A_ptr, A.impl(), A.device_type());
             } else {
-                // Need to copy (non-contiguous batch slice)
-                const float* A_ptr = A.data().data() + baseA;
-                std::vector<float> A_block(M * K);
-                std::copy(A_ptr, A_ptr + (M * K), A_block.begin());
-                A2D = Tensor({M, K}, A_block, A.device_type());
+                A2D = copy_matrix_slice(A, baseA, M, K);
             }
 
             if (B_is_contiguous) {
                 // Zero-copy view using raw pointer
-                float* B_ptr = const_cast<float*>(B.data().data() + baseB);
+                float* B_ptr = const_cast<float*>(raw_data(B) + baseB);
                 B2D = Tensor::from_ptr({K, N}, B_ptr, B.impl(), B.device_type());
             } else {
-                // Need to copy (non-contiguous batch slice)
-                const float* B_ptr = B.data().data() + baseB;
-                std::vector<float> B_block(K * N);
-                std::copy(B_ptr, B_ptr + (K * N), B_block.begin());
-                B2D = Tensor({K, N}, B_block, B.device_type());
+                B2D = copy_matrix_slice(B, baseB, K, N);
             }
 
             // Call gemm on the 2D slices
             Tensor C2D = gemm(A2D, B2D);
 
             // copy result back into the correct batch region of C
-            float* C_ptr = C.data().data() + baseC;
+            float* C_ptr = raw_data(C) + baseC;
             const auto& C2Ddata = C2D.data();
             std::copy(C2Ddata.begin(), C2Ddata.end(), C_ptr);
         }
@@ -302,9 +318,9 @@ namespace cpptensor {
         const float alpha = 1.0f;
         const float beta = 0.0f;
 
-        const float* Adata = A.data().data();
-        const float* xdata = x.data().data();
-        float* ydata = y.data().data();
+        const float* Adata = raw_data(A);
+        const float* xdata = raw_data(x);
+        float* ydata = raw_data(y);
 
         cblas_sgemv(
             CblasRowMajor,           // row-major storage
@@ -359,9 +375,9 @@ namespace cpptensor {
         const float alpha = 1.0f;
         const float beta = 0.0f;
 
-        const float* Adata = A.data().data();
-        const float* Bdata = B.data().data();
-        float* Cdata = C.data().data();
+        const float* Adata = raw_data(A);
+        const float* Bdata = raw_data(B);
+        float* Cdata = raw_data(C);
 
         // Set transpose flags based on stride pattern
         CBLAS_TRANSPOSE transA = A_trans ? CblasTrans : CblasNoTrans;
