@@ -2,18 +2,29 @@
 
 #include "cpptensor/enums/dispatcherEnum.h"
 
+#include <cstdlib>
 #include <string>
 
-namespace cpptensor {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#define CPPTENSOR_HAS_X86_CPUID 1
+#else
+#define CPPTENSOR_HAS_X86_CPUID 0
+#endif
+
+#if CPPTENSOR_HAS_X86_CPUID
     #if defined(_MSC_VER)
     #include <immintrin.h>
     #include <intrin.h>
     #else
     #include <cpuid.h>
     #endif
+#endif
 
+namespace cpptensor {
     inline bool has_avx2() {
-    #if defined(_MSC_VER)
+    #if !CPPTENSOR_HAS_X86_CPUID
+            return false;
+    #elif defined(_MSC_VER)
             int info[4];
             __cpuid(info, 0);
             if (info[0] < 7) return false;
@@ -27,7 +38,9 @@ namespace cpptensor {
         }
 
     inline bool has_avx512f() {
-    #if defined(_MSC_VER)
+    #if !CPPTENSOR_HAS_X86_CPUID
+            return false;
+    #elif defined(_MSC_VER)
             int info[4];
             __cpuid(info, 0);
             if (info[0] < 7) return false;
@@ -52,3 +65,4 @@ namespace cpptensor {
         return CpuIsa::GENERIC;
     }
 }
+#undef CPPTENSOR_HAS_X86_CPUID
