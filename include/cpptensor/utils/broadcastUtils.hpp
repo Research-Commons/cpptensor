@@ -81,10 +81,13 @@ namespace cpptensor {
         if ((int)unpadded_shape.size() > n) throw std::runtime_error("squeeze: target rank > padded rank");
 
         size_t padded_total = numel(padded_shape);
+        if (padded.size() != padded_total) {
+            throw std::runtime_error("squeeze: padded buffer size does not match padded shape");
+        }
         if (padded_total == 0) return {};
 
         if (unpadded_shape.empty()) {
-            // scalar: sum all elements
+            // scalar: sum all elements in the validated logical extent
             float acc = 0.0f;
             for (float v : padded) acc += v;
             return std::vector<float>{acc};
