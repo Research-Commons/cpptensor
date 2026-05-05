@@ -9,6 +9,7 @@
 #include "cpptensor/ops/comparison/ne.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/manipulation/stack.hpp"
+#include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
 #include "cpptensor/tensor/tensor.hpp"
 
@@ -82,6 +83,18 @@ TEST_CASE("comparison operators support tensor, scalar, and broadcast operands",
     cpptensor::Tensor row({1, 3}, {1, 5, 10});
     require_shape(a < row, {2, 3});
     require_data(a < row, {0, 1, 1, 0, 0, 1});
+}
+
+TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gemv]") {
+    cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor x({3}, {1, 0, -1});
+
+    require_shape(cpptensor::gemv(a, x), {2});
+    require_data(cpptensor::gemv(a, x), {-2, -2});
+
+    auto y = cpptensor::matmul(a, x);
+    require_shape(y, {2});
+    require_data(y, {-2, -2});
 }
 
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
