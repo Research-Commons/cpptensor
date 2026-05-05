@@ -1,6 +1,7 @@
 #include "cpptensor/tensor/tensorimpl.hpp"
 #include <numeric>
 #include <stdexcept>
+#include <utility>
 
 namespace cpptensor {
 
@@ -8,9 +9,13 @@ namespace cpptensor {
                            const std::vector<float>& data,
                            DeviceType device)
         : data_(data),
+          base_impl_(nullptr),
+          data_ptr_(nullptr),
+          stride_(),
+          offset_(0),
+          grad_fn_(nullptr),
           shape_(shape),
-          device_(device),
-          data_ptr_(nullptr)
+          device_(device)
     {
         size_t total = 1;
         for (auto s : shape_) total *= s;
@@ -24,9 +29,14 @@ namespace cpptensor {
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            float fill_value,
                            DeviceType device)
-        : shape_(shape),
-          device_(device),
-          data_ptr_(nullptr)
+        : data_(),
+          base_impl_(nullptr),
+          data_ptr_(nullptr),
+          stride_(),
+          offset_(0),
+          grad_fn_(nullptr),
+          shape_(shape),
+          device_(device)
     {
         size_t total = 1;
         for (auto s : shape_) total *= s;
@@ -37,11 +47,16 @@ namespace cpptensor {
     // View constructor - shares data with base
     TensorImpl::TensorImpl(std::shared_ptr<TensorImpl> base,
                            const std::vector<size_t>& new_shape,
-                           const std::vector<size_t>& new_stride)
-        : base_impl_(base),  // Keep base alive
+                           const std::vector<size_t>& new_stride,
+                           size_t offset)
+        : data_(),
+          base_impl_(std::move(base)),
+          data_ptr_(nullptr),
+          stride_(),
+          offset_(offset),
+          grad_fn_(nullptr),
           shape_(new_shape),
-          device_(base->device_),
-          data_ptr_(nullptr)  // Views delegate through base_impl_
+          device_(base_impl_->device_)
     {
         if (new_stride.empty()) {
             stride_ = compute_strides(new_shape);
@@ -56,10 +71,14 @@ namespace cpptensor {
                            float* data_ptr,
                            std::shared_ptr<TensorImpl> owner,
                            DeviceType device)
-        : base_impl_(owner),  // Keep owner alive
+        : data_(),
+          base_impl_(std::move(owner)),
+          data_ptr_(data_ptr),
+          stride_(),
+          offset_(0),
+          grad_fn_(nullptr),
           shape_(shape),
-          device_(device),
-          data_ptr_(data_ptr)  // Store raw pointer
+          device_(device)
     {
         stride_ = compute_strides(shape);
         // data_ is empty - we use data_ptr_ instead
@@ -84,31 +103,33 @@ namespace cpptensor {
     const float* TensorImpl::data_ptr() const {
         // Pointer-based view: return the raw pointer
         if (data_ptr_) {
-            return data_ptr_;
+            return data_ptr_ + offset_;
         }
         // View: delegate to base
         if (base_impl_) {
-            return base_impl_->data_ptr();
+            return base_impl_->data_ptr() + offset_;
         }
         // Own data: return pointer to vector
-        return data_.data();
+        return data_.data() + offset_;
     }
 
     float* TensorImpl::data_ptr() {
         // Pointer-based view: return the raw pointer
         if (data_ptr_) {
-            return data_ptr_;
+            return data_ptr_ + offset_;
         }
         // View: delegate to base
         if (base_impl_) {
-            return base_impl_->data_ptr();
+            return base_impl_->data_ptr() + offset_;
         }
         // Own data: return pointer to vector
-        return data_.data();
+        return data_.data() + offset_;
     }
 
     std::vector<size_t>& TensorImpl::stride(){ return stride_; }
     const std::vector<size_t>& TensorImpl::stride() const { return stride_; }
+
+    size_t TensorImpl::offset() const { return offset_; }
 
     const std::vector<size_t>& TensorImpl::shape() const { return shape_; }
     size_t TensorImpl::numel() const {

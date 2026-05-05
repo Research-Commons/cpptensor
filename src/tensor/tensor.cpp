@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <cmath>
 #include <iostream>
+#include <utility>
 
 namespace cpptensor {
 
@@ -23,6 +24,10 @@ namespace cpptensor {
                    float value,
                    DeviceType device)
         : impl_(std::make_shared<TensorImpl>(shape, value, device))
+    {}
+
+    Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
+        : impl_(std::move(impl))
     {}
 
     // ---------- Factories ----------
@@ -58,9 +63,7 @@ namespace cpptensor {
                            std::shared_ptr<TensorImpl> owner,
                            DeviceType device) {
         auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device);
-        Tensor result;
-        result.impl_ = impl;
-        return result;
+        return Tensor(std::move(impl));
     }
 
     // ---------- Shape & Info ----------
@@ -78,10 +81,36 @@ namespace cpptensor {
             std::cout << s[i];
         }
         std::cout << "], values=[";
-        const auto &d = impl_->data();
-        for (size_t i = 0; i < d.size(); ++i) {
+
+        // Use stride-aware access for views/sliced tensors
+        const auto &strides = impl_->stride();
+        const float* data_ptr = impl_->data_ptr();
+        size_t total_elements = numel();
+
+        // Helper to convert flat index to multi-dimensional indices
+        auto flat_to_indices = [&](size_t flat_idx) -> std::vector<size_t> {
+            std::vector<size_t> indices(s.size());
+            for (int i = (int)s.size() - 1; i >= 0; --i) {
+                indices[i] = flat_idx % s[i];
+                flat_idx /= s[i];
+            }
+            return indices;
+        };
+
+        // Helper to compute strided offset from multi-dimensional indices
+        auto compute_offset = [&](const std::vector<size_t>& indices) -> size_t {
+            size_t offset = 0;
+            for (size_t i = 0; i < indices.size(); ++i) {
+                offset += indices[i] * strides[i];
+            }
+            return offset;
+        };
+
+        for (size_t i = 0; i < total_elements; ++i) {
             if (i) std::cout << ", ";
-            std::cout << d[i];
+            auto indices = flat_to_indices(i);
+            size_t offset = compute_offset(indices);
+            std::cout << data_ptr[offset];
             if (i >= 31) { std::cout << ", ..."; break; }
         }
         std::cout << "])\n";
@@ -89,13 +118,15 @@ namespace cpptensor {
 
     void Tensor::print_pretty() const {
         // small pretty printer: only for 1D or 2D tensors
-        const auto s = impl_->shape();
-        const auto &d = impl_->data();
+        const auto &s = impl_->shape();
+        const auto &strides = impl_->stride();
+        const float* data_ptr = impl_->data_ptr();
+
         if (s.size() == 1) {
             std::cout << "[";
             for (size_t i = 0; i < s[0]; ++i) {
                 if (i) std::cout << ", ";
-                std::cout << d[i];
+                std::cout << data_ptr[i * strides[0]];
             }
             std::cout << "]\n";
         } else if (s.size() == 2) {
@@ -103,7 +134,8 @@ namespace cpptensor {
                 std::cout << "[";
                 for (size_t c = 0; c < s[1]; ++c) {
                     if (c) std::cout << ", ";
-                    std::cout << d[r * s[1] + c];
+                    size_t offset = r * strides[0] + c * strides[1];
+                    std::cout << data_ptr[offset];
                 }
                 std::cout << "]\n";
             }
@@ -196,6 +228,80 @@ namespace cpptensor {
         return reshape(new_shape);
     }
 
+    Tensor Tensor::slice(int dim,
+                         std::optional<int64_t> start,
+                         std::optional<int64_t> end,
+                         std::optional<int64_t> step) const {
+        const int rank = static_cast<int>(ndim());
+
+        // Normalize negative dimension
+        int norm_dim = dim;
+        if (norm_dim < 0) {
+            norm_dim += rank;
+        }
+
+        if (norm_dim < 0 || norm_dim >= rank) {
+            throw std::runtime_error("slice: dimension " + std::to_string(dim) +
+                                   " out of range for tensor with " + std::to_string(rank) + " dimensions");
+        }
+
+        auto new_shape = shape();
+        const auto& base_stride = impl_->stride();
+        std::vector<size_t> new_stride = base_stride;
+
+        const int64_t dim_size = static_cast<int64_t>(new_shape[norm_dim]);
+
+        // Default step is 1
+        const int64_t step_value = step.value_or(1);
+        if (step_value <= 0) {
+            throw std::runtime_error("slice: step must be positive, got " + std::to_string(step_value));
+        }
+
+        // Helper function to clamp indices to valid range
+        const auto clamp_index = [dim_size](int64_t idx) -> int64_t {
+            if (dim_size == 0) {
+                return 0;
+            }
+            // Handle negative indices (Python-style)
+            if (idx < 0) {
+                idx += dim_size;
+            }
+            // Clamp to valid range [0, dim_size]
+            if (idx < 0) {
+                idx = 0;
+            }
+            if (idx > dim_size) {
+                idx = dim_size;
+            }
+            return idx;
+        };
+
+        // Normalize start and end indices
+        int64_t start_idx = clamp_index(start.value_or(0));
+        int64_t end_idx = clamp_index(end.value_or(dim_size));
+
+        // Compute slice length
+        size_t slice_len = 0;
+        if (end_idx > start_idx && dim_size > 0) {
+            const int64_t distance = end_idx - start_idx;
+            slice_len = static_cast<size_t>((distance + step_value - 1) / step_value);
+        }
+
+        // Update shape and stride for sliced dimension
+        new_shape[norm_dim] = slice_len;
+        new_stride[norm_dim] = base_stride[norm_dim] * static_cast<size_t>(step_value);
+
+        // Calculate offset from base data
+        size_t offset_delta = 0;
+        if (dim_size > 0 && start_idx > 0) {
+            offset_delta = static_cast<size_t>(start_idx) * base_stride[norm_dim];
+        }
+
+        // Create view with modified shape, stride, and offset
+        auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride, offset_delta);
+        return Tensor(std::move(view_impl));
+    }
+
     Tensor Tensor::squeeze(int dim) const {
         auto sh = shape();
         std::vector<size_t> new_shape;
@@ -239,9 +345,9 @@ namespace cpptensor {
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
-        // Normalize dimension (allow -1 for "append")
+        // Normalize dimension (allow -1 for last index)
         int norm_dim = dim;
-        if (dim < 0) norm_dim = dim + ndims + 1;  // +1 because we're adding a dimension
+        if (dim < 0) norm_dim = dim + ndims + 1;  // +1 cuz we're adding a dimension
 
         if (norm_dim < 0 || norm_dim > ndims) {
             throw std::runtime_error("unsqueeze: dimension out of range");
@@ -297,7 +403,6 @@ namespace cpptensor {
         }
 
         // Create view with modified shape and stride
-        // This is zero-copy - just changes how we interpret the data
         auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride);
 
         Tensor result;
@@ -414,11 +519,19 @@ namespace cpptensor {
     }
 
     Tensor Tensor::max(int dim, bool keepdim) const {
-        return cpptensor::max(*this, dim, keepdim);
+        int actual_dim = dim;
+        if (actual_dim < 0) {
+            actual_dim += static_cast<int>(ndim());
+        }
+        return cpptensor::max(*this, actual_dim, keepdim);
     }
 
     Tensor Tensor::min(int dim, bool keepdim) const {
-        return cpptensor::min(*this, dim, keepdim);
+        int actual_dim = dim;
+        if (actual_dim < 0) {
+            actual_dim += static_cast<int>(ndim());
+        }
+        return cpptensor::min(*this, actual_dim, keepdim);
     }
 
 } // namespace cpptensor

@@ -1474,5 +1474,206 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
             }
         }
     }
+
+    // =============== Comparison Operations (AVX2) ===============
+
+    void AVX2::eq_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 eq: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 eq: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_EQ_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] == b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
+    void AVX2::ne_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 ne: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 ne: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_NEQ_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] != b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
+    void AVX2::gt_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 gt: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 gt: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_GT_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] > b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
+    void AVX2::lt_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 lt: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 lt: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_LT_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] < b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
+    void AVX2::ge_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 ge: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 ge: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_GE_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] >= b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
+    void AVX2::le_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out) {
+        if (A.device_type() != DeviceType::CPU ||
+            B.device_type() != DeviceType::CPU ||
+            Out.device_type() != DeviceType::CPU) {
+            throw std::runtime_error("AVX2 le: only CPU tensors supported");
+        }
+
+        if (A.shape() != B.shape() || A.shape() != Out.shape()) {
+            throw std::runtime_error("AVX2 le: shape mismatch");
+        }
+
+        const float* a = A.data().data();
+        const float* b = B.data().data();
+        float* o = Out.data().data();
+        const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+        const int stride = 8;
+        std::int64_t i = 0;
+        __m256 ones = _mm256_set1_ps(1.0f);
+
+        for (; i + stride <= n; i += stride) {
+            __m256 va = _mm256_loadu_ps(a + i);
+            __m256 vb = _mm256_loadu_ps(b + i);
+            __m256 cmp = _mm256_cmp_ps(va, vb, _CMP_LE_OQ);
+            __m256 result = _mm256_and_ps(cmp, ones);
+            _mm256_storeu_ps(o + i, result);
+        }
+
+        for (; i < n; ++i) {
+            o[i] = (a[i] <= b[i]) ? 1.0f : 0.0f;
+        }
+    }
+
 } // namespace cppgrad
 

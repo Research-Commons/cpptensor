@@ -1,6 +1,8 @@
 #include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/utils/broadcastUtils.hpp"
+#include "cpptensor/ops/linearAlgebra/dot.hpp"
+#include "cpptensor/backend/cpu_backend.h"
 
 #include <stdexcept>
 #include <vector>
@@ -59,8 +61,62 @@ namespace cpptensor {
         const auto& Ash = A.shape();
         const auto& Bsh = B.shape();
 
+        const size_t A_ndim = Ash.size();
+        const size_t B_ndim = Bsh.size();
+
+        // Case 1: 1D × 1D → dot product
+        if (A_ndim == 1 && B_ndim == 1) {
+            return dot(A, B);
+        }
+
+        //Case 2: 2D × 1D → matrix-vector product
+        if (A_ndim == 2 && B_ndim == 1) {
+            return gemv(A, B);
+        }
+
+        //Case 3: 1D × 2D → vector-matrix product
+        if (A_ndim == 1 && B_ndim == 2) {
+            // PyTorch behavior: treats 1D as row vector [1, N]
+            // Result: [1, N] × [N, M] → [1, M], then squeeze to [M]
+            //
+            // Implementation: Use gemm() with view() (RECOMMENDED)
+            // - view() operations are zero-copy (no memory allocation)
+            // - gemm() with [1,N] shape is well-optimized by BLAS
+            // - Keeps data contiguous in row-major order
+
+            const size_t N = Ash[0];  // Vector length
+            const size_t M = Bsh[1];  // Output size
+
+            if (N != Bsh[0]) {
+                throw std::runtime_error("matmul: 1D×2D dimension mismatch (vec.size != matrix.rows)");
+            }
+
+            // OPTION 1: Use gemm with view (CURRENT - RECOMMENDED)
+            // Reshape A from [N] to [1, N] for gemm (zero-copy view)
+            Tensor A_reshaped = A.view({1, N});
+            Tensor result = gemm(A_reshaped, B);  // [1, N] × [N, M] → [1, M]
+
+            // Squeeze result from [1, M] to [M] (zero-copy view)
+            return result.view({M});
+
+            // OPTION 2: Use gemv with transpose (COMMENTED OUT - FOR TESTING)
+            // Mathematical: y = Bᵀ * x where x=[N], Bᵀ=[M,N], y=[M]
+            // WARNING: transpose() creates non-contiguous view with column-major strides
+            // BLAS functions assume row-major, so you MUST call .contiguous() first
+            // This adds memory copy overhead, making it slower than Option 1
+            //
+            // Tensor B_T = B.transpose().contiguous();  // ⚠️ .contiguous() required!
+            // return gemv(B_T, A);                      // [M, N] × [N] → [M]
+            //
+            // Without .contiguous(), gemv() will read wrong memory locations because:
+            // - transpose() only swaps strides: [3,1] → [1,3] (column-major)
+            // - gemv() assumes row-major with lda=N
+            // - Results in incorrect output (e.g., [5,11,17] instead of [9,12,15])
+        }
+
+        //Case 4: 2D × 2D and higher-dimensional cases
         if (Ash.size() < 2 || Bsh.size() < 2)
-            throw std::runtime_error("matmul: tensors must have at least 2 dims");
+            throw std::runtime_error("matmul: tensors must have at least 1 dim (already handled above)");
 
         //if tensor is 2D dont waste computation
         if (Ash.size() == 2 && Bsh.size() == 2) {
@@ -197,6 +253,90 @@ namespace cpptensor {
         return C;
     }
 
+    Tensor gemv(const Tensor& A, const Tensor& x) {
+        // Matrix-vector product: y = A * x
+        // A: [M, N] matrix
+        // x: [N] vector
+        // Returns: [M] vector
+
+        if (A.device_type() != x.device_type()) {
+            throw std::runtime_error("gemv: device mismatch");
+        }
+
+        const auto& Ash = A.shape();
+        const auto& xsh = x.shape();
+
+        if (Ash.size() != 2) {
+            throw std::runtime_error("gemv: A must be a 2D matrix");
+        }
+        if (xsh.size() != 1) {
+            throw std::runtime_error("gemv: x must be a 1D vector");
+        }
+
+        const size_t M = Ash[0];  // rows of A
+        const size_t N = Ash[1];  // cols of A
+        const size_t xN = xsh[0]; // length of x
+
+        if (N != xN) {
+            throw std::runtime_error("gemv: dimension mismatch (A.cols != x.size)");
+        }
+
+        // Create output vector
+        Tensor y = Tensor::full({M}, 0.0f, A.device_type());
+
+    #ifdef USE_OPENBLAS
+        // ===== Use OpenBLAS SGEMV =====
+        //
+        // SGEMV performs: y = alpha * A * x + beta * y
+        //
+        // Parameters:
+        // - Layout: CblasRowMajor (row-major storage)
+        // - TransA: CblasNoTrans (use A as-is, not transposed)
+        // - M, N: matrix dimensions
+        // - alpha: scaling factor (1.0 for y = A*x)
+        // - A, lda: matrix and leading dimension
+        // - x, incx: input vector and stride
+        // - beta: scaling for existing y (0.0 to overwrite)
+        // - y, incy: output vector and stride
+
+        const float alpha = 1.0f;
+        const float beta = 0.0f;
+
+        const float* Adata = A.data().data();
+        const float* xdata = x.data().data();
+        float* ydata = y.data().data();
+
+        cblas_sgemv(
+            CblasRowMajor,           // row-major storage
+            CblasNoTrans,            // don't transpose A
+            static_cast<int>(M),     // rows of A
+            static_cast<int>(N),     // cols of A
+            alpha,                   // scaling factor for A*x
+            Adata,                   // matrix A
+            static_cast<int>(N),     // leading dimension (lda = N for row-major)
+            xdata,                   // vector x
+            1,                       // stride in x (contiguous)
+            beta,                    // scaling factor for y (0 = overwrite)
+            ydata,                   // output vector y
+            1                        // stride in y (contiguous)
+        );
+    #else
+        // Fallback: portable row-major matrix-vector multiply.
+        const float* Adata = A.data().data();
+        const float* xdata = x.data().data();
+        float* ydata = y.data().data();
+
+        for (size_t row = 0; row < M; ++row) {
+            float acc = 0.0f;
+            for (size_t col = 0; col < N; ++col) {
+                acc += Adata[row * N + col] * xdata[col];
+            }
+            ydata[row] = acc;
+        }
+    #endif
+
+        return y;
+    }
 
     Tensor gemm(const Tensor& A, const Tensor& B) {
         // OPTIMIZATION: Detect transpose to use BLAS flags instead of copying

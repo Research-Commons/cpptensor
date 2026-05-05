@@ -27,5 +27,13 @@ namespace cpptensor {
         static void meanKernel(const Tensor& input, Tensor& output, int dim, bool keepdim);
         static void maxKernel(const Tensor& input, Tensor& output, int dim, bool keepdim);
         static void minKernel(const Tensor& input, Tensor& output, int dim, bool keepdim);
+
+        // Comparison operations
+        static void eqKernel(const Tensor& A, const Tensor& B, Tensor& out);
+        static void neKernel(const Tensor& A, const Tensor& B, Tensor& out);
+        static void gtKernel(const Tensor& A, const Tensor& B, Tensor& out);
+        static void ltKernel(const Tensor& A, const Tensor& B, Tensor& out);
+        static void geKernel(const Tensor& A, const Tensor& B, Tensor& out);
+        static void leKernel(const Tensor& A, const Tensor& B, Tensor& out);
     };
 }

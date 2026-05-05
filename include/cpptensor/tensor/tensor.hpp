@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <optional>
+#include <cstdint>
 
 #include "cpptensor/tensor/tensorimpl.hpp"
 #include "cpptensor/enums/dispatcherEnum.h"   // for DeviceType
@@ -396,6 +398,38 @@ class Tensor {
         Tensor flatten(int start_dim = 0, int end_dim = -1) const;
 
         /**
+         * @brief Create zero-copy slice along a single dimension
+         *
+         * Produces a view into the tensor without copying data. The slice is
+         * defined by [start, end) with optional step controlling stride between
+         * selected elements. Negative indices are interpreted relative to the
+         * dimension size (e.g., -1 = last element). Only positive step values
+         * are supported.
+         *
+         * @param dim Dimension to slice (0-indexed, supports negative indexing)
+         * @param start Starting index (inclusive). Defaults to 0 if not set.
+         * @param end Ending index (exclusive). Defaults to dim size if not set.
+         * @param step Step between indices. Defaults to 1. Must be positive.
+         * @return Tensor view representing the requested slice (zero-copy)
+         * @throws std::runtime_error if dim out of range or step <= 0
+         *
+         * @example
+         * ```cpp
+         * Tensor A({10, 20, 30}, ...);
+         * Tensor B = A.slice(0, 2, 5);           // rows [2:5) → shape {3, 20, 30}
+         * Tensor C = A.slice(1, -10, -1);        // last 9 cols → shape {10, 9, 30}
+         * Tensor D = A.slice(2, 0, std::nullopt, 2);  // every 2nd → shape {10, 20, 15}
+         *
+         * // Modifying slice modifies original (zero-copy view)
+         * B.data()[0] = 42.0f;  // Also changes A
+         * ```
+         */
+        Tensor slice(int dim,
+                     std::optional<int64_t> start = std::nullopt,
+                     std::optional<int64_t> end = std::nullopt,
+                     std::optional<int64_t> step = std::nullopt) const;
+
+        /**
          * @brief Remove dimensions of size 1
          *
          * @param dim Dimension to squeeze (-1 means squeeze all size-1 dims)
@@ -498,6 +532,8 @@ class Tensor {
          * @return Independent copy of the tensor
          */
         Tensor clone() const;
+
+        // =============== Reduction Operations ===============
 
         // =============== Reduction Operations ===============
 
@@ -746,6 +782,77 @@ class Tensor {
          */
         friend Tensor operator/(float scalar, const Tensor& A);
 
+        // =============== Comparison Operations ===============
+
+        /**
+         * @brief Element-wise equality comparison: C = (A == B)
+         *
+         * Performs element-wise equality comparison with broadcasting support.
+         * Returns a tensor with 1.0f where elements are equal, 0.0f otherwise.
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator==(const Tensor& A, const Tensor& B);
+        friend Tensor operator==(const Tensor& A, float scalar);
+        friend Tensor operator==(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise inequality comparison: C = (A != B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator!=(const Tensor& A, const Tensor& B);
+        friend Tensor operator!=(const Tensor& A, float scalar);
+        friend Tensor operator!=(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise greater-than comparison: C = (A > B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator>(const Tensor& A, const Tensor& B);
+        friend Tensor operator>(const Tensor& A, float scalar);
+        friend Tensor operator>(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise less-than comparison: C = (A < B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator<(const Tensor& A, const Tensor& B);
+        friend Tensor operator<(const Tensor& A, float scalar);
+        friend Tensor operator<(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise greater-or-equal comparison: C = (A >= B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator>=(const Tensor& A, const Tensor& B);
+        friend Tensor operator>=(const Tensor& A, float scalar);
+        friend Tensor operator>=(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise less-or-equal comparison: C = (A <= B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator<=(const Tensor& A, const Tensor& B);
+        friend Tensor operator<=(const Tensor& A, float scalar);
+        friend Tensor operator<=(float scalar, const Tensor& B);
+
         /**
          * @brief Unary negation: C = -A
          *
@@ -770,6 +877,15 @@ class Tensor {
         Tensor(const std::vector<size_t>& shape,
                float value,
                DeviceType device = DeviceType::CPU);
+
+        /**
+         * @brief Protected constructor from TensorImpl pointer
+         *
+         * Used internally to create Tensor from existing TensorImpl (e.g., views).
+         *
+         * @param impl Shared pointer to TensorImpl
+         */
+        explicit Tensor(std::shared_ptr<TensorImpl> impl);
 
     private:
         /**

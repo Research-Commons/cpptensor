@@ -115,6 +115,14 @@ enum class OpType {
     Max,      ///< Reduction max: B = max(A, dim, keepdim)
     Min,      ///< Reduction min: B = min(A, dim, keepdim)
 
+    // =============== Comparison Operations ===============
+    Eq,       ///< Element-wise equality: C = (A == B), returns 1.0f/0.0f
+    Ne,       ///< Element-wise inequality: C = (A != B), returns 1.0f/0.0f
+    Gt,       ///< Element-wise greater than: C = (A > B), returns 1.0f/0.0f
+    Lt,       ///< Element-wise less than: C = (A < B), returns 1.0f/0.0f
+    Ge,       ///< Element-wise greater/equal: C = (A >= B), returns 1.0f/0.0f
+    Le,       ///< Element-wise less/equal: C = (A <= B), returns 1.0f/0.0f
+
     // =============== Linear Algebra ===============
     Matmul,   ///< Matrix multiplication: C = A @ B
     Dot       ///< Dot product (vector inner product): scalar = A · B

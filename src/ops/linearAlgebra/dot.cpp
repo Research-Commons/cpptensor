@@ -53,9 +53,7 @@ namespace cpptensor {
     #else
             KernelRegistry::instance().getKernel(OpType::Dot, A.device_type())(A, B, Out);
     #endif
-
-        KernelRegistry::instance().getKernel(OpType::Dot, A.device_type())(A, B, Out);
-        return Out;
+            return Out;
     }
 
 } // namespace cpptensor

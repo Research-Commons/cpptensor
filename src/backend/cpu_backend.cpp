@@ -779,6 +779,246 @@ void cpptensor::CPU::minKernel(const Tensor& input, Tensor& output, int dim, boo
     }
 }
 
+// ============================================================================
+// Comparison Kernels
+// ============================================================================
 
+/**
+ * @brief CPU Equality Comparison Kernel
+ *
+ * Performs element-wise equality comparison with broadcasting support.
+ * Returns 1.0f where elements are equal, 0.0f otherwise.
+ */
+void cpptensor::CPU::eqKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
 
+    // Build padded shapes for broadcasting
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
 
+    // Compute strides
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    // Element-wise comparison
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] == B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}
+
+/**
+ * @brief CPU Not-Equal Comparison Kernel
+ */
+void cpptensor::CPU::neKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
+
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
+
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] != B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}
+
+/**
+ * @brief CPU Greater-Than Comparison Kernel
+ */
+void cpptensor::CPU::gtKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
+
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
+
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] > B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}
+
+/**
+ * @brief CPU Less-Than Comparison Kernel
+ */
+void cpptensor::CPU::ltKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
+
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
+
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] < B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}
+
+/**
+ * @brief CPU Greater-or-Equal Comparison Kernel
+ */
+void cpptensor::CPU::geKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
+
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
+
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] >= B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}
+
+/**
+ * @brief CPU Less-or-Equal Comparison Kernel
+ */
+void cpptensor::CPU::leKernel(const Tensor &A, const Tensor &B, Tensor &out) {
+    const auto& a_sh = A.shape();
+    const auto& b_sh = B.shape();
+    const auto& out_sh = out.shape();
+    size_t n = out_sh.size();
+
+    std::vector<size_t> a_pad(n, 1), b_pad(n, 1);
+    size_t na = a_sh.size(), nb = b_sh.size();
+    for (size_t i = 0; i < n; ++i) {
+        a_pad[i] = (i < n-na ? 1 : a_sh[i-(n-na)]);
+        b_pad[i] = (i < n-nb ? 1 : b_sh[i-(n-nb)]);
+    }
+
+    std::vector<size_t> strideA(n), strideB(n), strideOut(n);
+    if (n > 0) {
+        strideA[n-1] = strideB[n-1] = strideOut[n-1] = 1;
+    }
+    for (int i = (int)n-2; i >= 0; --i) {
+        strideA[i]   = strideA[i+1] * a_pad[i+1];
+        strideB[i]   = strideB[i+1] * b_pad[i+1];
+        strideOut[i] = strideOut[i+1] * out_sh[i+1];
+    }
+
+    size_t total = 1;
+    for (size_t dim : out_sh) total *= dim;
+    for (size_t pos = 0; pos < total; ++pos) {
+        size_t idxA = 0, idxB = 0;
+        for (size_t dim = 0; dim < n; ++dim) {
+            size_t i = (pos / strideOut[dim]) % out_sh[dim];
+            if (a_pad[dim] != 1) idxA += i * strideA[dim];
+            if (b_pad[dim] != 1) idxB += i * strideB[dim];
+        }
+        out.data()[pos] = (A.data()[idxA] <= B.data()[idxB]) ? 1.0f : 0.0f;
+    }
+}

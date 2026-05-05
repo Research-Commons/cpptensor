@@ -29,3 +29,16 @@ static std::vector<size_t> computeBroadcastShape(const std::vector<size_t>& a, c
     }
     return out;
 }
+
+// Helper: check if two shapes require broadcasting (used for hybrid SIMD dispatch)
+static bool needsBroadcast(const std::vector<size_t>& shape_a, const std::vector<size_t>& shape_b) {
+    if (shape_a.size() != shape_b.size()) {
+        return true;
+    }
+    for (size_t i = 0; i < shape_a.size(); ++i) {
+        if (shape_a[i] != shape_b[i]) {
+            return true;
+        }
+    }
+    return false;
+}

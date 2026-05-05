@@ -26,6 +26,14 @@ namespace cpptensor {
         static void mean_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim);
         static void max_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim);
         static void min_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim);
+
+        // Comparison operations
+        static void eq_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+        static void ne_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+        static void gt_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+        static void lt_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+        static void ge_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
+        static void le_f32_avx2(const Tensor& A, const Tensor& B, Tensor& Out);
     };
 } // namespace cppgrad
 

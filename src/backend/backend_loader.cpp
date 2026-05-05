@@ -37,6 +37,14 @@ namespace cpptensor {
         R.registerReductionKernel(OpType::Max, DeviceType::CPU, CPU::maxKernel);
         R.registerReductionKernel(OpType::Min, DeviceType::CPU, CPU::minKernel);
 
+        // Comparison operations
+        R.registerKernel(OpType::Eq, DeviceType::CPU, CPU::eqKernel);
+        R.registerKernel(OpType::Ne, DeviceType::CPU, CPU::neKernel);
+        R.registerKernel(OpType::Gt, DeviceType::CPU, CPU::gtKernel);
+        R.registerKernel(OpType::Lt, DeviceType::CPU, CPU::ltKernel);
+        R.registerKernel(OpType::Ge, DeviceType::CPU, CPU::geKernel);
+        R.registerKernel(OpType::Le, DeviceType::CPU, CPU::leKernel);
+
 #ifdef BUILD_AVX2
         R.registerKernel(OpType::Add, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::add_f32_avx2);
         R.registerKernel(OpType::Mul, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mul_f32_avx2);
@@ -61,6 +69,14 @@ namespace cpptensor {
         R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mean_f32_avx2);
         R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
         R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
+
+        // AVX2 Comparison operations (hybrid dispatch in comparison ops handles broadcasting)
+        R.registerKernel(OpType::Eq, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::eq_f32_avx2);
+        R.registerKernel(OpType::Ne, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::ne_f32_avx2);
+        R.registerKernel(OpType::Gt, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::gt_f32_avx2);
+        R.registerKernel(OpType::Lt, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::lt_f32_avx2);
+        R.registerKernel(OpType::Ge, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::ge_f32_avx2);
+        R.registerKernel(OpType::Le, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::le_f32_avx2);
 #endif
 
 #ifdef BUILD_AVX512
