@@ -4,17 +4,17 @@ target_link_libraries(cpptensor_bench_cpu PRIVATE cpptensor benchmark::benchmark
 target_compile_options(cpptensor_bench_cpu PRIVATE -O3)
 
 # ==== AVX2 benchmark ====
-if (BUILD_AVX2)
+if (CPPTENSOR_ENABLE_AVX2)
     add_executable(cpptensor_bench_avx2 avx2_bench.cpp)
     target_link_libraries(cpptensor_bench_avx2 PRIVATE cpptensor benchmark::benchmark benchmark::benchmark_main)
-    target_compile_options(cpptensor_bench_avx2 PRIVATE -O3 -mavx2 -mfma)
+    target_compile_options(cpptensor_bench_avx2 PRIVATE -O3 ${CPPTENSOR_AVX2_COMPILE_FLAGS})
 endif()
 
 # ==== AVX512 benchmark ====
-if (BUILD_AVX512)
+if (CPPTENSOR_ENABLE_AVX512)
     add_executable(cpptensor_bench_avx512 avx512_bench.cpp)
     target_link_libraries(cpptensor_bench_avx512 PRIVATE cpptensor benchmark::benchmark benchmark::benchmark_main)
-    target_compile_options(cpptensor_bench_avx512 PRIVATE -O3 -mavx512f -mavx512dq -mavx512bw -mavx512vl -mfma)
+    target_compile_options(cpptensor_bench_avx512 PRIVATE -O3 ${CPPTENSOR_AVX512_COMPILE_FLAGS})
 endif()
 
 # ==== CUDA benchmark ====
