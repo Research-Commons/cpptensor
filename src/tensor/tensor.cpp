@@ -14,6 +14,46 @@
 
 namespace cpptensor {
 
+    namespace {
+
+        std::vector<float> copy_logical_data(const Tensor& tensor) {
+            const auto sh = tensor.shape();
+            const auto& st = tensor.stride();
+            const float* src = tensor.impl()->data_ptr();
+            const size_t total = tensor.numel();
+
+            std::vector<float> copied(total);
+            if (total == 0) {
+                return copied;
+            }
+
+            if (sh.empty()) {
+                copied[0] = src[0];
+                return copied;
+            }
+
+            std::vector<size_t> indices(sh.size(), 0);
+            for (size_t i = 0; i < total; ++i) {
+                size_t src_offset = 0;
+                for (size_t d = 0; d < sh.size(); ++d) {
+                    src_offset += indices[d] * st[d];
+                }
+
+                copied[i] = src[src_offset];
+
+                for (int d = static_cast<int>(sh.size()) - 1; d >= 0; --d) {
+                    if (++indices[static_cast<size_t>(d)] < sh[static_cast<size_t>(d)]) {
+                        break;
+                    }
+                    indices[static_cast<size_t>(d)] = 0;
+                }
+            }
+
+            return copied;
+        }
+
+    } // namespace
+
     // ---------- Constructors ----------
     Tensor::Tensor(const std::vector<size_t>& shape,
                    const std::vector<float>& values,
@@ -473,38 +513,11 @@ namespace cpptensor {
         }
 
         // Need to actually copy and reorder data
-        auto sh = shape();
-        auto st = stride();
-        size_t total = numel();
-        std::vector<float> new_data(total);
-
-        // Copy data in contiguous (row-major) order
-        std::vector<size_t> indices(sh.size(), 0);
-        const float* src = impl->data_ptr();
-
-        for (size_t i = 0; i < total; ++i) {
-            // Compute offset in original tensor using strides
-            size_t src_offset = 0;
-            for (size_t d = 0; d < sh.size(); ++d) {
-                src_offset += indices[d] * st[d];
-            }
-
-            new_data[i] = src[src_offset];
-
-            // Increment multi-dimensional index
-            for (int d = static_cast<int>(sh.size()) - 1; d >= 0; --d) {
-                if (++indices[d] < sh[d]) break;
-                indices[d] = 0;
-            }
-        }
-
-        return Tensor(sh, new_data, device_type());
+        return Tensor(shape(), copy_logical_data(*this), device_type());
     }
 
     Tensor Tensor::clone() const {
-        const auto impl = require_impl(__func__);
-        // Deep copy - create new data buffer
-        return Tensor(shape(), impl->data(), device_type());
+        return Tensor(shape(), copy_logical_data(*this), device_type());
     }
 
     // =============== Reduction Operations Implementation ===============
