@@ -1,8 +1,14 @@
 #include "cpptensor/dispatcher/kernelRegistry.h"
 
 #include "backend/isa/isaDetect.hpp"
+#include "cpptensor/backend/backend_loader.hpp"
 
 namespace cpptensor {
+    namespace {
+        void ensure_kernels_initialized() {
+            initialize_kernels();
+        }
+    }
 
     void KernelRegistry::registerKernel(OpType op, DeviceType dev, CpuIsa isa, KernelFunc fn) {
         forward_[{op, dev, isa}] = std::move(fn);
@@ -27,6 +33,8 @@ namespace cpptensor {
 
     // Try exact (op,dev,best_isa) then degrade to AVX2 then GENERIC
     KernelRegistry::KernelFunc KernelRegistry::getKernel(OpType op, DeviceType dev) {
+        ensure_kernels_initialized();
+
         if (dev == DeviceType::CPU) {
             auto best = detect_best_cpu_isa();
             for (CpuIsa isa : {best, CpuIsa::AVX2, CpuIsa::GENERIC}) {
@@ -43,6 +51,8 @@ namespace cpptensor {
     }
 
     KernelRegistry::UnaryKernelFunc KernelRegistry::getUnaryKernel(OpType op, DeviceType dev) {
+        ensure_kernels_initialized();
+
         if (dev == DeviceType::CPU) {
             auto best = detect_best_cpu_isa();
             for (CpuIsa isa : {best, CpuIsa::AVX2, CpuIsa::GENERIC}) {
@@ -59,6 +69,8 @@ namespace cpptensor {
     }
 
     KernelRegistry::ReductionKernelFunc KernelRegistry::getReductionKernel(OpType op, DeviceType dev) {
+        ensure_kernels_initialized();
+
         if (dev == DeviceType::CPU) {
             auto best = detect_best_cpu_isa();
             for (CpuIsa isa : {best, CpuIsa::AVX2, CpuIsa::GENERIC}) {
