@@ -23,6 +23,18 @@ TEST_CASE("CUDA-tagged tensors fail clearly when a binary kernel is unavailable"
 #endif
 }
 
+TEST_CASE("mixed-device arithmetic fails at the operator boundary",
+          "[dispatcher][device-mismatch][arithmetic]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor cpu({2}, {1.0f, 2.0f}, DeviceType::CPU);
+    cpptensor::Tensor cuda({2}, {3.0f, 4.0f}, DeviceType::CUDA);
+
+    REQUIRE_THROWS_WITH(cpu - cuda, ContainsSubstring("Device mismatch in sub"));
+    REQUIRE_THROWS_WITH(cpu * cuda, ContainsSubstring("Device mismatch in mul"));
+    REQUIRE_THROWS_WITH(cpu / cuda, ContainsSubstring("Device mismatch in div"));
+}
+
 TEST_CASE("CUDA-tagged tensors fail clearly when a unary kernel is unavailable",
           "[dispatcher][cuda][fallback]") {
     cpptensor::initialize_kernels();

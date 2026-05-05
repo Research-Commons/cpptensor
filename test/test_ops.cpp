@@ -465,6 +465,26 @@ TEST_CASE("compute_broadcast_shape rejects incompatible dimensions and preserves
             std::vector<size_t>{2, 3, 4});
 }
 
+TEST_CASE("sub mul and div support asymmetric broadcasting from the right-hand operand",
+          "[arithmetic][broadcast]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor lhs({1, 3}, {1, 2, 3});
+    cpptensor::Tensor rhs({2, 3}, {10, 20, 30, 40, 50, 60});
+
+    auto difference = lhs - rhs;
+    require_shape(difference, {2, 3});
+    require_data(difference, {-9, -18, -27, -39, -48, -57});
+
+    auto product = lhs * rhs;
+    require_shape(product, {2, 3});
+    require_data(product, {10, 40, 90, 40, 100, 180});
+
+    auto quotient = lhs / rhs;
+    require_shape(quotient, {2, 3});
+    require_data(quotient, {0.1f, 0.1f, 0.1f, 0.025f, 0.04f, 0.05f});
+}
+
 TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gemv]") {
     cpptensor::Tensor a({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor x({3}, {1, 0, -1});
