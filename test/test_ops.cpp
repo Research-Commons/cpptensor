@@ -12,10 +12,10 @@
 #include "cpptensor/ops/comparison/ge.hpp"
 #include "cpptensor/ops/comparison/gt.hpp"
 #include "cpptensor/ops/comparison/le.hpp"
+#include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/comparison/lt.hpp"
 #include "cpptensor/ops/comparison/ne.hpp"
 #include "cpptensor/ops/linearAlgebra/tensordot.hpp"
-#include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/manipulation/stack.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
 #include "cpptensor/backend/backend_loader.hpp"
@@ -325,8 +325,6 @@ TEST_CASE("gemv and matmul produce the same matrix-vector result", "[matmul][gem
 }
 
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
-    cpptensor::initialize_kernels();
-
     cpptensor::Tensor t({2, 3}, {1, 2, 3, 4, 5, 6});
 
     auto global_sum = t.sum();
