@@ -140,7 +140,7 @@ target_compile_definitions(cpptensor PUBLIC
         $<$<BOOL:${BUILD_AVX2}>:BUILD_AVX2>
         $<$<BOOL:${BUILD_AVX512}>:BUILD_AVX512>
         $<$<BOOL:${BUILD_CUDA}>:BUILD_CUDA>
-        $<$<BOOL:${USE_OPENBLAS}>:USE_OPENBLAS>
+        $<$<BOOL:${HAVE_OPENBLAS}>:USE_OPENBLAS>
         #$<$<BOOL:${USE_STD_SIMD}>:USE_STD_SIMD>
 )
 

@@ -106,10 +106,12 @@ namespace cpptensor {
          * @param base Base TensorImpl to share data with
          * @param new_shape Shape for the view
          * @param new_stride Stride for the view (optional, computed if empty)
+         * @param offset Offset from base data start (for slicing)
          */
         TensorImpl(std::shared_ptr<TensorImpl> base,
                    const std::vector<size_t>& new_shape,
-                   const std::vector<size_t>& new_stride = {});
+                   const std::vector<size_t>& new_stride = {},
+                   size_t offset = 0);
 
         /**
          * @brief Construct view TensorImpl that wraps raw pointer (zero-copy)
@@ -200,6 +202,16 @@ namespace cpptensor {
          *          Advanced use only (e.g., implementing views/slicing).
          */
         std::vector<size_t>& stride();
+
+        /**
+         * @brief Get offset from base tensor data start
+         *
+         * For view tensors (created via slicing), returns the element offset
+         * from the base tensor's data pointer. For non-view tensors, returns 0.
+         *
+         * @return Offset in number of elements
+         */
+        size_t offset() const;
 
         /**
          * @brief Check if backward pass has been executed
@@ -305,6 +317,15 @@ namespace cpptensor {
          * stride_[i] = number of elements to skip to move one step along dimension i
          */
         std::vector<size_t> stride_;
+
+        /**
+         * @brief Offset from base tensor data (for sliced views)
+         *
+         * When this TensorImpl is a sliced view, offset_ indicates how many
+         * elements to skip from the base tensor's data pointer. For non-view
+         * tensors or non-sliced views, this is 0.
+         */
+        size_t offset_ = 0;
 
         /**
          * @brief Gradient function for autograd

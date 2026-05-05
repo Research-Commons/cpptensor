@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <optional>
+#include <cstdint>
 
 #include "cpptensor/tensor/tensorimpl.hpp"
 #include "cpptensor/enums/dispatcherEnum.h"   // for DeviceType
@@ -396,6 +398,38 @@ class Tensor {
         Tensor flatten(int start_dim = 0, int end_dim = -1) const;
 
         /**
+         * @brief Create zero-copy slice along a single dimension
+         *
+         * Produces a view into the tensor without copying data. The slice is
+         * defined by [start, end) with optional step controlling stride between
+         * selected elements. Negative indices are interpreted relative to the
+         * dimension size (e.g., -1 = last element). Only positive step values
+         * are supported.
+         *
+         * @param dim Dimension to slice (0-indexed, supports negative indexing)
+         * @param start Starting index (inclusive). Defaults to 0 if not set.
+         * @param end Ending index (exclusive). Defaults to dim size if not set.
+         * @param step Step between indices. Defaults to 1. Must be positive.
+         * @return Tensor view representing the requested slice (zero-copy)
+         * @throws std::runtime_error if dim out of range or step <= 0
+         *
+         * @example
+         * ```cpp
+         * Tensor A({10, 20, 30}, ...);
+         * Tensor B = A.slice(0, 2, 5);           // rows [2:5) → shape {3, 20, 30}
+         * Tensor C = A.slice(1, -10, -1);        // last 9 cols → shape {10, 9, 30}
+         * Tensor D = A.slice(2, 0, std::nullopt, 2);  // every 2nd → shape {10, 20, 15}
+         *
+         * // Modifying slice modifies original (zero-copy view)
+         * B.data()[0] = 42.0f;  // Also changes A
+         * ```
+         */
+        Tensor slice(int dim,
+                     std::optional<int64_t> start = std::nullopt,
+                     std::optional<int64_t> end = std::nullopt,
+                     std::optional<int64_t> step = std::nullopt) const;
+
+        /**
          * @brief Remove dimensions of size 1
          *
          * @param dim Dimension to squeeze (-1 means squeeze all size-1 dims)
@@ -500,10 +534,164 @@ class Tensor {
         Tensor clone() const;
 
         // =============== Reduction Operations ===============
-        // TODO: Implement reduction operations
-        // Tensor sum(int dim = -1, bool keepdim = false) const;
-        // Tensor mean(int dim = -1, bool keepdim = false) const;
-        // Tensor max(int dim = -1, bool keepdim = false) const;
+
+        // =============== Reduction Operations ===============
+
+        /**
+         * @brief Sum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by summing all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto total = A.sum();         // Global sum, shape [1]
+         * auto total2 = A.sum(true);    // Global sum with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor sum(bool keepdim = false) const;
+
+        /**
+         * @brief Sum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by summing along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.sum(1);            // Sum along dim 1 → shape [2, 4]
+         * auto C = A.sum(-1);           // Sum along last dim → shape [2, 3]
+         * auto D = A.sum(0, true);      // Sum along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor sum(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Mean (average) of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by computing the mean of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto avg = A.mean();          // Global mean, shape [1]
+         * auto avg2 = A.mean(true);     // Global mean with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor mean(bool keepdim = false) const;
+
+        /**
+         * @brief Mean (average) of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by computing the mean along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.mean(1);           // Mean along dim 1 → shape [2, 4]
+         * auto C = A.mean(-1);          // Mean along last dim → shape [2, 3]
+         * auto D = A.mean(0, true);     // Mean along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor mean(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Maximum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by finding the maximum of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto max_val = A.max();       // Global max, shape [1]
+         * auto max_val2 = A.max(true);  // Global max with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor max(bool keepdim = false) const;
+
+        /**
+         * @brief Maximum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by finding the maximum along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.max(1);            // Max along dim 1 → shape [2, 4]
+         * auto C = A.max(-1);           // Max along last dim → shape [2, 3]
+         * auto D = A.max(0, true);      // Max along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor max(int dim, bool keepdim = false) const;
+
+        /**
+         * @brief Minimum of all tensor elements (global reduction)
+         *
+         * Reduces the tensor by finding the minimum of all elements and returns a scalar.
+         *
+         * @param keepdim Keep all reduced dimensions as size 1 if true
+         * @return Tensor scalar (shape [1] or [1,1,...,1] if keepdim=true)
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto min_val = A.min();       // Global min, shape [1]
+         * auto min_val2 = A.min(true);  // Global min with keepdim, shape [1, 1, 1]
+         * ```
+         */
+        Tensor min(bool keepdim = false) const;
+
+        /**
+         * @brief Minimum of tensor elements along a specific dimension
+         *
+         * Reduces the tensor by finding the minimum along the specified dimension.
+         * Supports negative indexing (e.g., -1 for last dimension, -2 for second-to-last).
+         *
+         * @param dim Dimension to reduce (supports negative indexing)
+         * @param keepdim Keep reduced dimension as size 1 if true
+         * @return Tensor with one dimension reduced
+         *
+         * @throws std::runtime_error if dim is out of range
+         *
+         * @example
+         * ```cpp
+         * Tensor A({2, 3, 4}, values);
+         * auto B = A.min(1);            // Min along dim 1 → shape [2, 4]
+         * auto C = A.min(-1);           // Min along last dim → shape [2, 3]
+         * auto D = A.min(0, true);      // Min along dim 0 with keepdim → shape [1, 3, 4]
+         * ```
+         */
+        Tensor min(int dim, bool keepdim = false) const;
 
         // =============== Operator Overloads (Element-wise) ===============
 
@@ -594,6 +782,77 @@ class Tensor {
          */
         friend Tensor operator/(float scalar, const Tensor& A);
 
+        // =============== Comparison Operations ===============
+
+        /**
+         * @brief Element-wise equality comparison: C = (A == B)
+         *
+         * Performs element-wise equality comparison with broadcasting support.
+         * Returns a tensor with 1.0f where elements are equal, 0.0f otherwise.
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator==(const Tensor& A, const Tensor& B);
+        friend Tensor operator==(const Tensor& A, float scalar);
+        friend Tensor operator==(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise inequality comparison: C = (A != B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator!=(const Tensor& A, const Tensor& B);
+        friend Tensor operator!=(const Tensor& A, float scalar);
+        friend Tensor operator!=(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise greater-than comparison: C = (A > B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator>(const Tensor& A, const Tensor& B);
+        friend Tensor operator>(const Tensor& A, float scalar);
+        friend Tensor operator>(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise less-than comparison: C = (A < B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator<(const Tensor& A, const Tensor& B);
+        friend Tensor operator<(const Tensor& A, float scalar);
+        friend Tensor operator<(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise greater-or-equal comparison: C = (A >= B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator>=(const Tensor& A, const Tensor& B);
+        friend Tensor operator>=(const Tensor& A, float scalar);
+        friend Tensor operator>=(float scalar, const Tensor& B);
+
+        /**
+         * @brief Element-wise less-or-equal comparison: C = (A <= B)
+         *
+         * @param A Left operand tensor
+         * @param B Right operand tensor
+         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         */
+        friend Tensor operator<=(const Tensor& A, const Tensor& B);
+        friend Tensor operator<=(const Tensor& A, float scalar);
+        friend Tensor operator<=(float scalar, const Tensor& B);
+
         /**
          * @brief Unary negation: C = -A
          *
@@ -618,6 +877,15 @@ class Tensor {
         Tensor(const std::vector<size_t>& shape,
                float value,
                DeviceType device = DeviceType::CPU);
+
+        /**
+         * @brief Protected constructor from TensorImpl pointer
+         *
+         * Used internally to create Tensor from existing TensorImpl (e.g., views).
+         *
+         * @param impl Shared pointer to TensorImpl
+         */
+        explicit Tensor(std::shared_ptr<TensorImpl> impl);
 
     private:
         /**

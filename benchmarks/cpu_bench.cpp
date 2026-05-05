@@ -5,10 +5,6 @@
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/activation/relu.hpp"
 #include "cpptensor/ops/activation/sigmoid.hpp"
-#include "cpptensor/ops/arithmetic/add.hpp"
-#include "cpptensor/ops/arithmetic/div.hpp"
-#include "cpptensor/ops/arithmetic/neg.hpp"
-#include "cpptensor/ops/arithmetic/mul.hpp"
 #include "cpptensor/ops/arithmetic/pow.hpp"
 #include "cpptensor/ops/arithmetic/sub.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
@@ -166,6 +162,79 @@ static void BM_Dot_CPU(benchmark::State& state) {
     }
 }
 
+// Reduction Operations
+static void BM_Sum_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Sum, DeviceType::CPU, CPU::sumKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.sum();  // Global sum
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Sum_Dim_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Sum, DeviceType::CPU, CPU::sumKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.sum(0);  // Sum along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Mean_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Mean, DeviceType::CPU, CPU::meanKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.mean();  // Global mean
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Mean_Dim_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Mean, DeviceType::CPU, CPU::meanKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.mean(0);  // Mean along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Max_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Max, DeviceType::CPU, CPU::maxKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.max();  // Global max
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Max_Dim_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Max, DeviceType::CPU, CPU::maxKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.max(0);  // Max along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Min_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Min, DeviceType::CPU, CPU::minKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.min();  // Global min
+        benchmark::DoNotOptimize(C);
+    }
+}
+
+static void BM_Min_Dim_CPU(benchmark::State& state) {
+    KernelRegistry::instance().registerReductionKernel(OpType::Min, DeviceType::CPU, CPU::minKernel);
+    Tensor A = Tensor::full({2048, 2048}, 5.f, DeviceType::CPU);
+    for (auto _ : state) {
+        Tensor C = A.min(0);  // Min along dimension 0
+        benchmark::DoNotOptimize(C);
+    }
+}
+
 BENCHMARK(BM_Add_CPU);
 BENCHMARK(BM_Mul_CPU);
 BENCHMARK(BM_Exp_CPU);
@@ -180,4 +249,12 @@ BENCHMARK(BM_Sigmoid_CPU);
 BENCHMARK(BM_Relu_CPU);
 BENCHMARK(BM_Matmul_CPU);
 BENCHMARK(BM_Dot_CPU);
+BENCHMARK(BM_Sum_CPU);
+BENCHMARK(BM_Sum_Dim_CPU);
+BENCHMARK(BM_Mean_CPU);
+BENCHMARK(BM_Mean_Dim_CPU);
+BENCHMARK(BM_Max_CPU);
+BENCHMARK(BM_Max_Dim_CPU);
+BENCHMARK(BM_Min_CPU);
+BENCHMARK(BM_Min_Dim_CPU);
 BENCHMARK_MAIN();

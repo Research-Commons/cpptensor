@@ -1,10 +1,15 @@
 #include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/ops/reduction/sum.hpp"
+#include "cpptensor/ops/reduction/mean.hpp"
+#include "cpptensor/ops/reduction/max.hpp"
+#include "cpptensor/ops/reduction/min.hpp"
 
 #include <random>
 #include <algorithm>
 #include <iomanip>
 #include <cmath>
 #include <iostream>
+#include <utility>
 
 namespace cpptensor {
 
@@ -19,6 +24,10 @@ namespace cpptensor {
                    float value,
                    DeviceType device)
         : impl_(std::make_shared<TensorImpl>(shape, value, device))
+    {}
+
+    Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
+        : impl_(std::move(impl))
     {}
 
     // ---------- Factories ----------
@@ -54,9 +63,7 @@ namespace cpptensor {
                            std::shared_ptr<TensorImpl> owner,
                            DeviceType device) {
         auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device);
-        Tensor result;
-        result.impl_ = impl;
-        return result;
+        return Tensor(std::move(impl));
     }
 
     // ---------- Shape & Info ----------
@@ -74,10 +81,36 @@ namespace cpptensor {
             std::cout << s[i];
         }
         std::cout << "], values=[";
-        const auto &d = impl_->data();
-        for (size_t i = 0; i < d.size(); ++i) {
+
+        // Use stride-aware access for views/sliced tensors
+        const auto &strides = impl_->stride();
+        const float* data_ptr = impl_->data_ptr();
+        size_t total_elements = numel();
+
+        // Helper to convert flat index to multi-dimensional indices
+        auto flat_to_indices = [&](size_t flat_idx) -> std::vector<size_t> {
+            std::vector<size_t> indices(s.size());
+            for (int i = (int)s.size() - 1; i >= 0; --i) {
+                indices[i] = flat_idx % s[i];
+                flat_idx /= s[i];
+            }
+            return indices;
+        };
+
+        // Helper to compute strided offset from multi-dimensional indices
+        auto compute_offset = [&](const std::vector<size_t>& indices) -> size_t {
+            size_t offset = 0;
+            for (size_t i = 0; i < indices.size(); ++i) {
+                offset += indices[i] * strides[i];
+            }
+            return offset;
+        };
+
+        for (size_t i = 0; i < total_elements; ++i) {
             if (i) std::cout << ", ";
-            std::cout << d[i];
+            auto indices = flat_to_indices(i);
+            size_t offset = compute_offset(indices);
+            std::cout << data_ptr[offset];
             if (i >= 31) { std::cout << ", ..."; break; }
         }
         std::cout << "])\n";
@@ -85,13 +118,15 @@ namespace cpptensor {
 
     void Tensor::print_pretty() const {
         // small pretty printer: only for 1D or 2D tensors
-        const auto s = impl_->shape();
-        const auto &d = impl_->data();
+        const auto &s = impl_->shape();
+        const auto &strides = impl_->stride();
+        const float* data_ptr = impl_->data_ptr();
+
         if (s.size() == 1) {
             std::cout << "[";
             for (size_t i = 0; i < s[0]; ++i) {
                 if (i) std::cout << ", ";
-                std::cout << d[i];
+                std::cout << data_ptr[i * strides[0]];
             }
             std::cout << "]\n";
         } else if (s.size() == 2) {
@@ -99,7 +134,8 @@ namespace cpptensor {
                 std::cout << "[";
                 for (size_t c = 0; c < s[1]; ++c) {
                     if (c) std::cout << ", ";
-                    std::cout << d[r * s[1] + c];
+                    size_t offset = r * strides[0] + c * strides[1];
+                    std::cout << data_ptr[offset];
                 }
                 std::cout << "]\n";
             }
@@ -192,6 +228,80 @@ namespace cpptensor {
         return reshape(new_shape);
     }
 
+    Tensor Tensor::slice(int dim,
+                         std::optional<int64_t> start,
+                         std::optional<int64_t> end,
+                         std::optional<int64_t> step) const {
+        const int rank = static_cast<int>(ndim());
+
+        // Normalize negative dimension
+        int norm_dim = dim;
+        if (norm_dim < 0) {
+            norm_dim += rank;
+        }
+
+        if (norm_dim < 0 || norm_dim >= rank) {
+            throw std::runtime_error("slice: dimension " + std::to_string(dim) +
+                                   " out of range for tensor with " + std::to_string(rank) + " dimensions");
+        }
+
+        auto new_shape = shape();
+        const auto& base_stride = impl_->stride();
+        std::vector<size_t> new_stride = base_stride;
+
+        const int64_t dim_size = static_cast<int64_t>(new_shape[norm_dim]);
+
+        // Default step is 1
+        const int64_t step_value = step.value_or(1);
+        if (step_value <= 0) {
+            throw std::runtime_error("slice: step must be positive, got " + std::to_string(step_value));
+        }
+
+        // Helper function to clamp indices to valid range
+        const auto clamp_index = [dim_size](int64_t idx) -> int64_t {
+            if (dim_size == 0) {
+                return 0;
+            }
+            // Handle negative indices (Python-style)
+            if (idx < 0) {
+                idx += dim_size;
+            }
+            // Clamp to valid range [0, dim_size]
+            if (idx < 0) {
+                idx = 0;
+            }
+            if (idx > dim_size) {
+                idx = dim_size;
+            }
+            return idx;
+        };
+
+        // Normalize start and end indices
+        int64_t start_idx = clamp_index(start.value_or(0));
+        int64_t end_idx = clamp_index(end.value_or(dim_size));
+
+        // Compute slice length
+        size_t slice_len = 0;
+        if (end_idx > start_idx && dim_size > 0) {
+            const int64_t distance = end_idx - start_idx;
+            slice_len = static_cast<size_t>((distance + step_value - 1) / step_value);
+        }
+
+        // Update shape and stride for sliced dimension
+        new_shape[norm_dim] = slice_len;
+        new_stride[norm_dim] = base_stride[norm_dim] * static_cast<size_t>(step_value);
+
+        // Calculate offset from base data
+        size_t offset_delta = 0;
+        if (dim_size > 0 && start_idx > 0) {
+            offset_delta = static_cast<size_t>(start_idx) * base_stride[norm_dim];
+        }
+
+        // Create view with modified shape, stride, and offset
+        auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride, offset_delta);
+        return Tensor(std::move(view_impl));
+    }
+
     Tensor Tensor::squeeze(int dim) const {
         auto sh = shape();
         std::vector<size_t> new_shape;
@@ -235,9 +345,9 @@ namespace cpptensor {
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
-        // Normalize dimension (allow -1 for "append")
+        // Normalize dimension (allow -1 for last index)
         int norm_dim = dim;
-        if (dim < 0) norm_dim = dim + ndims + 1;  // +1 because we're adding a dimension
+        if (dim < 0) norm_dim = dim + ndims + 1;  // +1 cuz we're adding a dimension
 
         if (norm_dim < 0 || norm_dim > ndims) {
             throw std::runtime_error("unsqueeze: dimension out of range");
@@ -293,7 +403,6 @@ namespace cpptensor {
         }
 
         // Create view with modified shape and stride
-        // This is zero-copy - just changes how we interpret the data
         auto view_impl = std::make_shared<TensorImpl>(impl_, new_shape, new_stride);
 
         Tensor result;
@@ -381,141 +490,48 @@ namespace cpptensor {
         return Tensor(shape(), impl_->data(), device_type());
     }
 
-} // namespace cpptensor
+    // =============== Reduction Operations Implementation ===============
 
-// // -------- Reductions (only global dim implemented for now) --------
-// Tensor Tensor::sum(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("sum(dim) not implemented yet (only global sum)");
-//     float acc = 0.0f;
-//     for (float v : impl_->data()) acc += v;
-//     // return scalar as shape {1}
-//     return Tensor({1}, std::vector<float>{acc}, false);
-// }
-//
-// Tensor Tensor::mean(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("mean(dim) not implemented yet (only global mean)");
-//     float acc = 0.0f;
-//     for (float v : impl_->data()) acc += v;
-//     return Tensor({1}, std::vector<float>{acc / (float)numel()}, false);
-// }
-//
-// Tensor Tensor::max(int dim, bool keepdim) const {
-//     if (dim != -1) throw std::runtime_error("max(dim) not implemented yet (only global max)");
-//     const auto &d = impl_->data();
-//     if (d.empty()) throw std::runtime_error("max on empty tensor");
-//     float m = d[0];
-//     for (auto v : d) if (v > m) m = v;
-//     return Tensor({1}, std::vector<float>{m}, false);
-// }
-//
-// // -------- Elementwise operators (simple implementations) --------
-// static void check_shapes_match(const Tensor& a, const Tensor& b) {
-//     if (a.shape() != b.shape()) throw std::runtime_error("shape mismatch in binary op");
-// }
-//
-// Tensor operator+(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] + Bd[i];
-//     return out;
-// }
-//
-// Tensor operator-(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] - Bd[i];
-//     return out;
-// }
-//
-// Tensor operator*(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) Od[i] = Ad[i] * Bd[i];
-//     return out;
-// }
-//
-// Tensor operator/(const Tensor& a, const Tensor& b) {
-//     check_shapes_match(a,b);
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad() || b.requires_grad());
-//     const auto &Ad = a.data();
-//     const auto &Bd = b.data();
-//     auto &Od = out.data();
-//     size_t N = Ad.size();
-//     for (size_t i = 0; i < N; ++i) {
-//         if (Bd[i] == 0.0f) Od[i] = std::numeric_limits<float>::infinity();
-//         else Od[i] = Ad[i] / Bd[i];
-//     }
-//     return out;
-// }
-//
-// // Scalar ops
-// Tensor operator+(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] + s;
-//     return out;
-// }
-// Tensor operator+(float s, const Tensor& a) { return a + s; }
-//
-// Tensor operator-(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] - s;
-//     return out;
-// }
-// Tensor operator-(float s, const Tensor& a) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = s - Ad[i];
-//     return out;
-// }
-//
-// Tensor operator*(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] * s;
-//     return out;
-// }
-// Tensor operator*(float s, const Tensor& a) { return a * s; }
-//
-// Tensor operator/(const Tensor& a, float s) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     if (s == 0.0f) {
-//         for (size_t i = 0; i < Ad.size(); ++i) Od[i] = std::numeric_limits<float>::infinity();
-//     } else {
-//         for (size_t i = 0; i < Ad.size(); ++i) Od[i] = Ad[i] / s;
-//     }
-//     return out;
-// }
-// Tensor operator/(float s, const Tensor& a) {
-//     auto out = Tensor::full(a.shape(), 0.0f, a.requires_grad());
-//     const auto &Ad = a.data();
-//     auto &Od = out.data();
-//     for (size_t i = 0; i < Ad.size(); ++i) {
-//         if (Ad[i] == 0.0f) Od[i] = std::numeric_limits<float>::infinity();
-//         else Od[i] = s / Ad[i];
-//     }
-//     return out;
-// }
-//
-// Tensor operator-(const Tensor& a) {
-//     return a * (-1.0f);
-// }
+    // Global reduction overloads (no dim parameter)
+    Tensor Tensor::sum(bool keepdim) const {
+        return cpptensor::sum(*this, std::nullopt, keepdim);
+    }
+
+    Tensor Tensor::mean(bool keepdim) const {
+        return cpptensor::mean(*this, std::nullopt, keepdim);
+    }
+
+    Tensor Tensor::max(bool keepdim) const {
+        return cpptensor::max(*this, -1, keepdim);
+    }
+
+    Tensor Tensor::min(bool keepdim) const {
+        return cpptensor::min(*this, -1, keepdim);
+    }
+
+    // Dimensional reduction overloads (with dim parameter)
+    Tensor Tensor::sum(int dim, bool keepdim) const {
+        return cpptensor::sum(*this, std::optional<int>(dim), keepdim);
+    }
+
+    Tensor Tensor::mean(int dim, bool keepdim) const {
+        return cpptensor::mean(*this, std::optional<int>(dim), keepdim);
+    }
+
+    Tensor Tensor::max(int dim, bool keepdim) const {
+        int actual_dim = dim;
+        if (actual_dim < 0) {
+            actual_dim += static_cast<int>(ndim());
+        }
+        return cpptensor::max(*this, actual_dim, keepdim);
+    }
+
+    Tensor Tensor::min(int dim, bool keepdim) const {
+        int actual_dim = dim;
+        if (actual_dim < 0) {
+            actual_dim += static_cast<int>(ndim());
+        }
+        return cpptensor::min(*this, actual_dim, keepdim);
+    }
+
+} // namespace cpptensor
