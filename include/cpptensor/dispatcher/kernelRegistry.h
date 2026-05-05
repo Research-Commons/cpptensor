@@ -29,7 +29,8 @@ namespace cpptensor {
         void registerReductionKernel(OpType op, DeviceType dev, CpuIsa isa, ReductionKernelFunc fn);
         void registerReductionKernel(OpType op, DeviceType dev, ReductionKernelFunc fn);
 
-        // Try exact (op,dev,best_isa) then degrade to AVX2 then GENERIC
+        // CPU dispatch tries best_isa then degrades to AVX2 then GENERIC.
+        // Non-CPU dispatch requires an exact device match.
         KernelFunc getKernel(OpType op, DeviceType dev);
 
         UnaryKernelFunc getUnaryKernel(OpType op, DeviceType dev);

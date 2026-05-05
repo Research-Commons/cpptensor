@@ -4,6 +4,19 @@
 
 namespace cpptensor {
 
+    namespace {
+        const char* deviceTypeName(DeviceType device) {
+            switch (device) {
+                case DeviceType::CPU:
+                    return "CPU";
+                case DeviceType::CUDA:
+                    return "CUDA";
+                default:
+                    return "Unknown";
+            }
+        }
+    } // namespace
+
     Tensor stack(const std::vector<Tensor>& tensors, int dim) {
         // 1. Validate input: empty tensor list
         if (tensors.empty()) {
@@ -35,6 +48,13 @@ namespace cpptensor {
         for (size_t i = 1; i < tensors.size(); ++i) {
             const auto& t = tensors[i];
             auto t_shape = t.shape();
+
+            if (t.device_type() != first_tensor.device_type()) {
+                throw std::runtime_error("stack: all tensors must be on the same device. Tensor 0 is on " +
+                                         std::string(deviceTypeName(first_tensor.device_type())) +
+                                         ", but tensor " + std::to_string(i) + " is on " +
+                                         std::string(deviceTypeName(t.device_type())));
+            }
 
             // Check number of dimensions matches
             if (static_cast<int>(t_shape.size()) != ndim) {
