@@ -168,6 +168,24 @@ void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     }
 }
 
+void cpptensor::CPU::negKernel(const Tensor& A, Tensor& Out) {
+    if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {
+        throw std::runtime_error("neg_f32_generic: only CPU tensors supported");
+    }
+
+    if (A.shape() != Out.shape()) {
+        throw std::runtime_error("neg_f32_generic: shape mismatch");
+    }
+
+    const float* in_data = A.data().data();
+    float* out_data = Out.data().data();
+    const std::int64_t n = static_cast<std::int64_t>(Out.numel());
+
+    for (std::int64_t i = 0; i < n; ++i) {
+        out_data[i] = -in_data[i];
+    }
+}
+
 void cpptensor::CPU::expKernel(const Tensor& A, Tensor& Out) {
     // ==== Sanity checks ====
     if (A.device_type() != DeviceType::CPU || Out.device_type() != DeviceType::CPU) {

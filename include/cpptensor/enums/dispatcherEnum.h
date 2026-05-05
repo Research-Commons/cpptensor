@@ -90,6 +90,7 @@ enum class OpType {
     Mul,      ///< Element-wise multiplication: C = A * B (Hadamard product)
     Sub,      ///< Element-wise subtraction: C = A - B
     Div,      ///< Element-wise division: C = A / B
+    Neg,      ///< Element-wise negation: B = -A
     Pow,      ///< Element-wise power: C = A^B
 
     // =============== Transcendental Functions ===============
@@ -243,4 +244,3 @@ struct DispatchKey {
         return isa < o.isa;
     }
 };
-

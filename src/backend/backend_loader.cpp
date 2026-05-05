@@ -23,6 +23,7 @@ namespace cpptensor {
             R.registerKernel(OpType::Matmul, DeviceType::CPU, CPU::gemmf32kernel);
             R.registerKernel(OpType::Dot, DeviceType::CPU, CPU::dotKernel);
 
+            R.registerUnaryKernel(OpType::Neg, DeviceType::CPU, CPU::negKernel);
             R.registerUnaryKernel(OpType::Exp, DeviceType::CPU, CPU::expKernel);
             R.registerUnaryKernel(OpType::Log, DeviceType::CPU, CPU::logKernel);
             R.registerUnaryKernel(OpType::Abs, DeviceType::CPU, CPU::absKernel);

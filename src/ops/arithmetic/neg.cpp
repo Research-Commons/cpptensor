@@ -1,18 +1,13 @@
 #include "ops/arithmetic/neg.hpp"
+#include "dispatcher/kernelRegistry.h"
 #include "tensor/tensor.hpp"
 
 
 namespace cpptensor {
 
     Tensor operator-(const Tensor& a) {
-        std::vector<float> neg_data(a.data().size());
-        const auto& src = a.data();
-
-        for (size_t i = 0; i < src.size(); ++i)
-            neg_data[i] = -src[i];
-
-        Tensor out(a.shape(), neg_data, a.device_type());
-
+        Tensor out = Tensor::full(a.shape(), 0.0f, a.device_type());
+        KernelRegistry::instance().getUnaryKernel(OpType::Neg, a.device_type())(a, out);
         return out;
     }
 
