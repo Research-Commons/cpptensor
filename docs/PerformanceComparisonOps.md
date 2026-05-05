@@ -141,10 +141,28 @@ if (M * N * K < threshold) {
 - Better handling of non-contiguous intermediate results
 - 8-10× faster than cpptensor
 
+#### Issue #29 Follow-up (May 5, 2026)
+
+The issue #29 optimization work added a zero-copy contraction path for the
+common "suffix of A / prefix of B" layouts and a transpose-view path for the
+mirrored prefix/suffix case. On the same CPU benchmark host, the direct
+contractions now avoid the two full-tensor permutation copies that previously
+dominated runtime.
+
+| Workload | `origin/main` | Optimized branch | Speedup | Notes |
+|----------|---------------|------------------|---------|-------|
+| `tensordot([64,128,256], [256,96,64], axes=1)` | 191.44 ms | **92.61 ms** | **2.07×** | Both operands reshape directly into GEMM inputs |
+| `tensordot([16,32,64,128], [64,128,32,16], axes=2)` | 183.72 ms | **58.33 ms** | **3.15×** | Avoids both large permutation/materialization steps |
+| `tensordot([16,24,32,48], [32,16,48,20], axes=([0,2],[1,0]))` | 39.21 ms | **23.44 ms** | **1.67×** | Fallback still materializes, but view-safe slice handling removes extra overhead |
+
+The remaining gap is now concentrated in the fully shuffled fallback path,
+where cpptensor still needs at least one materialization for arbitrary axis
+orderings.
+
 #### 💡 Future Work
-- Implement specialized tensordot path
-- Optimize reshape/transpose sequences
-- Consider temporary buffer reuse
+- Extend the zero-copy planner beyond simple prefix/suffix axis groups
+- Reuse a scratch buffer in the arbitrary-axis fallback path
+- Consider dedicated contraction kernels for heavily shuffled layouts
 
 ---
 
