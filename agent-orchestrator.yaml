@@ -14,7 +14,7 @@ projects:
     defaultBranch: main
     agentConfig:
       permissions: permissionless
-      model: gpt-5.5
+      model: gpt-5.4
     agentRules: |-
       Always run tests before pushing.
       Use conventional commits (feat:, fix:, chore:, docs:, refactor:, test:).
@@ -22,7 +22,7 @@ projects:
       Write clear commit messages that explain WHY, not just WHAT.
       Run all cpptensor configure, build, test, and benchmark commands through the dedicated conda environment, e.g. `conda run -n cpptensor ...`, or from an activated `cpptensor` environment.
       Ensure the environment is present before CMake work: `conda env update -n cpptensor -f environment.yml --prune` (or create it with `conda env create -f environment.yml` if it does not exist).
-      Do not spawn or use Codex fast, spark, or mini models for this repo; use gpt-5.5 unless the human explicitly overrides the model.
+      Do not spawn or use Codex fast, spark, or mini models for this repo; use gpt-5.4 unless the human explicitly overrides the model.
     postCreate:
       - >-
         bash -lc 'if command -v conda >/dev/null 2>&1; then
