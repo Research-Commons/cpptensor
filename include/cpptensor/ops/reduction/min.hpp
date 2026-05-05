@@ -18,7 +18,7 @@ namespace cpptensor {
      * @example
      * ```cpp
      * Tensor A = Tensor::randn({3, 4});
-     * Tensor min_all = min(A);              // Min of all elements, shape: ()
+     * Tensor min_all = min(A);              // Min of all elements, shape: []
      * Tensor min_dim0 = min(A, 0);          // Min along dim 0, shape: (4,)
      * Tensor min_dim0_keep = min(A, 0, true); // Min along dim 0, shape: (1, 4)
      * ```
