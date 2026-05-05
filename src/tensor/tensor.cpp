@@ -517,6 +517,7 @@ namespace cpptensor {
     }
 
     Tensor Tensor::clone() const {
+        require_impl(__func__);
         return Tensor(shape(), copy_logical_data(*this), device_type());
     }
 
