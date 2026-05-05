@@ -3,6 +3,7 @@
 
 #include <stdexcept>
 
+#include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/ops/helperOps.hpp"
 
@@ -17,9 +18,14 @@ namespace cpptensor {
         std::vector<size_t> out_shape = computeBroadcastShape(a.shape(), b.shape());
         Tensor out(out_shape, 0.0f, a.device_type());
 
-        // Lookup and call the registered kernel
-        KernelRegistry::instance()
-            .getKernel(OpType::Add, a.device_type())(a, b, out);
+        // Broadcasted CPU arithmetic stays on the generic kernel; same-shape inputs
+        // keep the runtime ISA-dispatched fast path.
+        if (a.device_type() == DeviceType::CPU && needsBroadcast(a.shape(), b.shape())) {
+            CPU::addKernel(a, b, out);
+        } else {
+            KernelRegistry::instance()
+                .getKernel(OpType::Add, a.device_type())(a, b, out);
+        }
         return out;
     }
 

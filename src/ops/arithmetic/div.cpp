@@ -3,20 +3,25 @@
 
 #include <stdexcept>
 
+#include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/ops/helperOps.hpp"
 
 namespace cpptensor {
 
     Tensor operator/(const Tensor& a, const Tensor& b) {
-        if (a.device_type() != a.device_type()) {
+        if (a.device_type() != b.device_type()) {
             throw std::runtime_error("Device mismatch in div");
         }
-        std::vector<size_t> out_shape = computeBroadcastShape(a.shape(), a.shape());
+        std::vector<size_t> out_shape = computeBroadcastShape(a.shape(), b.shape());
         Tensor out(out_shape, 0.0f, a.device_type());
 
-        KernelRegistry::instance()
-            .getKernel(OpType::Div, a.device_type())(a, b, out);
+        if (a.device_type() == DeviceType::CPU && needsBroadcast(a.shape(), b.shape())) {
+            CPU::divKernel(a, b, out);
+        } else {
+            KernelRegistry::instance()
+                .getKernel(OpType::Div, a.device_type())(a, b, out);
+        }
         return out;
     }
 
