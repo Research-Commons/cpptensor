@@ -154,6 +154,13 @@ namespace cpptensor {
                    DeviceType device = DeviceType::CPU,
                    DType dtype = DType::FLOAT32);
 
+        ~TensorImpl();
+
+        TensorImpl(const TensorImpl&) = delete;
+        TensorImpl& operator=(const TensorImpl&) = delete;
+        TensorImpl(TensorImpl&&) = delete;
+        TensorImpl& operator=(TensorImpl&&) = delete;
+
         // =============== Data Accessors ===============
 
         /**
@@ -206,6 +213,16 @@ namespace cpptensor {
          */
         const void* raw_data_ptr() const;
         void* raw_data_ptr();
+
+        /**
+         * @brief Get pointer for a specific backend and ensure residency
+         */
+        const float* backend_data_ptr(DeviceType dev) const;
+
+        /**
+         * @brief Get mutable pointer for a specific backend and mark it dirty
+         */
+        float* backend_data_ptr(DeviceType dev);
 
         /**
          * @brief Get const reference to stride information
@@ -315,15 +332,23 @@ namespace cpptensor {
         /**
          * @brief Set device for tensor storage
          *
-         * Changes the device type. Note: This does NOT actually move data.
-         * It only updates the metadata flag. Actual data transfer must be
-         * handled separately.
+         * Changes the preferred device and performs required data migration
+         * for float32 owning tensors.
          *
          * @param dev New device type
          *
-         * @warning Does not perform actual data migration. Use with caution.
          */
         void set_device(DeviceType dev);
+
+        /**
+         * @brief Copy tensor storage to another device and return a new impl
+         */
+        std::shared_ptr<TensorImpl> copy_to(DeviceType dev) const;
+
+        /**
+         * @brief Ensure the current storage is resident on the target device
+         */
+        void ensure_resident(DeviceType dev) const;
 
     private:
         /**
@@ -409,6 +434,21 @@ namespace cpptensor {
         DType dtype_ = DType::FLOAT32;
 
         /**
+         * @brief CUDA device storage for owning contiguous float32 tensors
+         */
+        mutable float* cuda_data_ = nullptr;
+
+        /**
+         * @brief Whether host storage contains up-to-date logical contents
+         */
+        mutable bool host_data_valid_ = true;
+
+        /**
+         * @brief Whether CUDA storage contains up-to-date logical contents
+         */
+        mutable bool cuda_data_valid_ = false;
+
+        /**
          * @brief Compute strides from shape (row-major layout)
          *
          * Calculates stride values for efficient multi-dimensional indexing.
@@ -424,6 +464,11 @@ namespace cpptensor {
          * ```
          */
         std::vector<size_t> compute_strides(const std::vector<size_t>& shape);
+
+        /**
+         * @brief Free CUDA storage owned by this impl
+         */
+        void release_cuda_storage() const;
     };
 
 } // namespace cpptensor

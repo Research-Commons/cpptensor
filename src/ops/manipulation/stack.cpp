@@ -1,21 +1,9 @@
 #include "cpptensor/ops/manipulation/stack.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
+#include "cpptensor/ops/helperOps.hpp"
 #include <stdexcept>
 
 namespace cpptensor {
-
-    namespace {
-        const char* deviceTypeName(DeviceType device) {
-            switch (device) {
-                case DeviceType::CPU:
-                    return "CPU";
-                case DeviceType::CUDA:
-                    return "CUDA";
-                default:
-                    return "Unknown";
-            }
-        }
-    } // namespace
 
     Tensor stack(const std::vector<Tensor>& tensors, int dim) {
         // 1. Validate input: empty tensor list
@@ -75,6 +63,10 @@ namespace cpptensor {
                                            std::to_string(i));
                 }
             }
+        }
+
+        if (common_device == DeviceType::CUDA) {
+            throw_cuda_unsupported("stack");
         }
 
         // 5. Unsqueeze each tensor at the stack dimension to add a new dimension of size 1

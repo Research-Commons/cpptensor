@@ -5,6 +5,10 @@
 #include <stdexcept>
 #include <utility>
 
+#ifdef BUILD_CUDA
+#include <cuda_runtime.h>
+#endif
+
 namespace cpptensor {
 
     namespace {
@@ -39,6 +43,20 @@ namespace cpptensor {
             }
             return out;
         }
+
+#ifdef BUILD_CUDA
+        inline void cuda_check(cudaError_t status, const char* what) {
+            if (status != cudaSuccess) {
+                throw std::runtime_error(
+                    std::string("CUDA failure during ") + what + ": " + cudaGetErrorString(status));
+            }
+        }
+#endif
+
+        [[noreturn]] void throw_cuda_not_built() {
+            throw std::runtime_error(
+                "CUDA transfer requested, but cpptensor was built without BUILD_CUDA support");
+        }
     } // namespace
 
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
@@ -60,6 +78,12 @@ namespace cpptensor {
             throw std::runtime_error("TensorImpl: data size does not match shape");
         }
         stride_ = compute_strides(shape_);
+
+        if (device_ == DeviceType::CUDA) {
+#ifdef BUILD_CUDA
+            ensure_resident(DeviceType::CUDA);
+#endif
+        }
     }
 
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
@@ -140,6 +164,12 @@ namespace cpptensor {
           dtype_(DType::FLOAT32)
     {
         stride_ = compute_strides(shape_);
+
+        if (device_ == DeviceType::CUDA) {
+#ifdef BUILD_CUDA
+            ensure_resident(DeviceType::CUDA);
+#endif
+        }
     }
 
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
@@ -235,6 +265,10 @@ namespace cpptensor {
             throw std::runtime_error("TensorImpl::from_ptr currently supports only float32 pointers");
         }
         stride_ = compute_strides(shape);
+    }
+
+    TensorImpl::~TensorImpl() {
+        release_cuda_storage();
     }
 
     bool TensorImpl::is_pointer_backed_view() const {
@@ -375,6 +409,7 @@ namespace cpptensor {
             if (base_impl_) {
                 return base_impl_->data();
             }
+            ensure_resident(DeviceType::CPU);
             return std::get<std::vector<float>>(storage_);
         }
 
@@ -393,12 +428,76 @@ namespace cpptensor {
             if (base_impl_) {
                 return base_impl_->data();
             }
+            ensure_resident(DeviceType::CPU);
+            host_data_valid_ = true;
+            cuda_data_valid_ = false;
             return std::get<std::vector<float>>(storage_);
         }
 
         throw std::runtime_error(
             "Tensor::data(): mutable access is unavailable for sliced, permuted, "
             "transposed, or pointer-backed views. Call contiguous() or clone() first.");
+    }
+
+    void TensorImpl::ensure_resident(DeviceType dev) const {
+        if (dev == DeviceType::CUDA && dtype_ != DType::FLOAT32) {
+            throw std::runtime_error(
+                "Tensor::to(DeviceType::CUDA) currently supports only float32 tensors");
+        }
+
+        if (data_ptr_ != nullptr) {
+            throw std::runtime_error(
+                "TensorImpl::ensure_resident: pointer-backed views do not support explicit device transfer");
+        }
+
+        if (base_impl_) {
+            base_impl_->ensure_resident(dev);
+            return;
+        }
+
+        if (dtype_ != DType::FLOAT32) {
+            return;
+        }
+
+        auto& host = const_cast<std::vector<float>&>(std::get<std::vector<float>>(storage_));
+        const size_t total = numel();
+        const size_t bytes = total * sizeof(float);
+
+        if (dev == DeviceType::CPU) {
+            if (host_data_valid_) {
+                return;
+            }
+
+#ifdef BUILD_CUDA
+            if (total != 0) {
+                cuda_check(cudaMemcpy(host.data(), cuda_data_, bytes, cudaMemcpyDeviceToHost),
+                           "device-to-host copy");
+            }
+#else
+            throw_cuda_not_built();
+#endif
+            host_data_valid_ = true;
+            return;
+        }
+
+#ifdef BUILD_CUDA
+        if (cuda_data_valid_) {
+            return;
+        }
+
+        if (total != 0 && cuda_data_ == nullptr) {
+            cuda_check(cudaMalloc(&cuda_data_, bytes), "device allocation");
+        }
+
+        if (host_data_valid_ && total != 0) {
+            cuda_check(cudaMemcpy(cuda_data_, host.data(), bytes, cudaMemcpyHostToDevice),
+                       "host-to-device copy");
+        }
+
+        cuda_data_valid_ = true;
+#else
+        throw_cuda_not_built();
+#endif
     }
 
     const void* TensorImpl::raw_data_ptr() const {
@@ -412,6 +511,10 @@ namespace cpptensor {
         if (base_impl_) {
             const auto* base = static_cast<const std::uint8_t*>(base_impl_->raw_data_ptr());
             return static_cast<const void*>(base + offset_ * element_size_bytes());
+        }
+
+        if (dtype_ == DType::FLOAT32) {
+            ensure_resident(DeviceType::CPU);
         }
 
         return std::visit(
@@ -430,8 +533,17 @@ namespace cpptensor {
         }
 
         if (base_impl_) {
+            if (dtype_ == DType::FLOAT32) {
+                return static_cast<void*>(base_impl_->data_ptr() + offset_);
+            }
             auto* base = static_cast<std::uint8_t*>(base_impl_->raw_data_ptr());
             return static_cast<void*>(base + offset_ * element_size_bytes());
+        }
+
+        if (dtype_ == DType::FLOAT32) {
+            ensure_resident(DeviceType::CPU);
+            host_data_valid_ = true;
+            cuda_data_valid_ = false;
         }
 
         return std::visit(
@@ -446,7 +558,14 @@ namespace cpptensor {
             throw std::runtime_error(
                 "Tensor::data_ptr(): float pointer access requires float32 tensor dtype.");
         }
-        return static_cast<const float*>(raw_data_ptr());
+        if (data_ptr_) {
+            return data_ptr_ + offset_;
+        }
+        if (base_impl_) {
+            return base_impl_->data_ptr() + offset_;
+        }
+        ensure_resident(DeviceType::CPU);
+        return std::get<std::vector<float>>(storage_).data() + offset_;
     }
 
     float* TensorImpl::data_ptr() {
@@ -454,7 +573,117 @@ namespace cpptensor {
             throw std::runtime_error(
                 "Tensor::data_ptr(): float pointer access requires float32 tensor dtype.");
         }
-        return static_cast<float*>(raw_data_ptr());
+        if (data_ptr_) {
+            return data_ptr_ + offset_;
+        }
+        if (base_impl_) {
+            return base_impl_->data_ptr() + offset_;
+        }
+        ensure_resident(DeviceType::CPU);
+        host_data_valid_ = true;
+        cuda_data_valid_ = false;
+        return std::get<std::vector<float>>(storage_).data() + offset_;
+    }
+
+    const float* TensorImpl::backend_data_ptr(DeviceType dev) const {
+        if (dev == DeviceType::CPU) {
+            return data_ptr();
+        }
+        if (dtype_ != DType::FLOAT32) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): CUDA backend is currently float32-only");
+        }
+        if (data_ptr_) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): pointer-backed views do not expose CUDA storage");
+        }
+        if (base_impl_) {
+            return base_impl_->backend_data_ptr(dev) + offset_;
+        }
+        ensure_resident(DeviceType::CUDA);
+        return cuda_data_ + offset_;
+    }
+
+    float* TensorImpl::backend_data_ptr(DeviceType dev) {
+        if (dev == DeviceType::CPU) {
+            return data_ptr();
+        }
+        if (dtype_ != DType::FLOAT32) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): CUDA backend is currently float32-only");
+        }
+        if (data_ptr_) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): pointer-backed views do not expose CUDA storage");
+        }
+        if (base_impl_) {
+            return base_impl_->backend_data_ptr(dev) + offset_;
+        }
+        ensure_resident(DeviceType::CUDA);
+        host_data_valid_ = false;
+        cuda_data_valid_ = true;
+        return cuda_data_ + offset_;
+    }
+
+    std::shared_ptr<TensorImpl> TensorImpl::copy_to(DeviceType dev) const {
+        if (dev == DeviceType::CUDA && dtype_ != DType::FLOAT32) {
+            throw std::runtime_error(
+                "Tensor::copy_to(DeviceType::CUDA) currently supports only float32 tensors");
+        }
+
+        if (dtype_ == DType::FLOAT32) {
+            std::vector<float> logical;
+            materialize_logical_data(logical);
+            auto copied = std::make_shared<TensorImpl>(shape_, logical, DeviceType::CPU);
+            copied->set_device(dev);
+            return copied;
+        }
+
+        if (dtype_ == DType::FLOAT64) {
+            std::vector<std::uint8_t> bytes;
+            materialize_logical_data_bytes(bytes);
+            std::vector<double> values(numel());
+            if (!values.empty()) {
+                std::memcpy(values.data(), bytes.data(), bytes.size());
+            }
+            auto copied = std::make_shared<TensorImpl>(shape_, values, DeviceType::CPU);
+            copied->set_device(dev);
+            return copied;
+        }
+
+        if (dtype_ == DType::INT32) {
+            std::vector<std::uint8_t> bytes;
+            materialize_logical_data_bytes(bytes);
+            std::vector<std::int32_t> values(numel());
+            if (!values.empty()) {
+                std::memcpy(values.data(), bytes.data(), bytes.size());
+            }
+            auto copied = std::make_shared<TensorImpl>(shape_, values, DeviceType::CPU);
+            copied->set_device(dev);
+            return copied;
+        }
+
+        std::vector<std::uint8_t> bytes;
+        materialize_logical_data_bytes(bytes);
+        std::vector<bool> values(numel(), false);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = bytes[i] != 0;
+        }
+        auto copied = std::make_shared<TensorImpl>(shape_, values, DeviceType::CPU);
+        copied->set_device(dev);
+        return copied;
+    }
+
+    void TensorImpl::release_cuda_storage() const {
+#ifdef BUILD_CUDA
+        if (cuda_data_ != nullptr) {
+            cudaFree(cuda_data_);
+            cuda_data_ = nullptr;
+        }
+#else
+        cuda_data_ = nullptr;
+#endif
+        cuda_data_valid_ = false;
     }
 
     std::vector<size_t>& TensorImpl::stride(){ return stride_; }
@@ -469,7 +698,17 @@ namespace cpptensor {
 
     DeviceType TensorImpl::device() const { return device_; }
     DType TensorImpl::dtype() const { return dtype_; }
-    void TensorImpl::set_device(DeviceType dev) { device_ = dev; }
+    void TensorImpl::set_device(DeviceType dev) {
+        if (device_ == dev) {
+            return;
+        }
+        if (dev == DeviceType::CUDA && dtype_ != DType::FLOAT32) {
+            throw std::runtime_error(
+                "Tensor::set_device(DeviceType::CUDA) currently supports only float32 tensors");
+        }
+        ensure_resident(dev);
+        device_ = dev;
+    }
 
     bool TensorImpl::has_called_backward() const {
         // TODO: Implement autograd backward tracking

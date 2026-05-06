@@ -35,6 +35,13 @@ inline const char* deviceTypeName(DeviceType device) {
     return "Unknown";
 }
 
+inline void throw_cuda_unsupported(const char* op_name) {
+    throw std::runtime_error(
+        std::string(op_name) +
+        ": no CUDA kernel is registered for this operation. "
+        "Use tensor.to(DeviceType::CPU) or tensor.copy_to(DeviceType::CPU) explicitly.");
+}
+
 inline Tensor materialize_for_backend_input(const Tensor& tensor) {
     // Explicit fallback policy:
     // backends that are not stride-aware consume contiguous logical layouts.

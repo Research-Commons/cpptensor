@@ -65,6 +65,9 @@ namespace cpptensor {
         if (A.device_type() != B.device_type()) {
             throw std::runtime_error("matmul: device mismatch");
         }
+        if (A.device_type() == DeviceType::CUDA) {
+            throw_cuda_unsupported("matmul");
+        }
 
         const auto& Ash = A.shape();
         const auto& Bsh = B.shape();
@@ -245,6 +248,9 @@ namespace cpptensor {
         if (A.device_type() != x.device_type()) {
             throw std::runtime_error("gemv: device mismatch");
         }
+        if (A.device_type() == DeviceType::CUDA) {
+            throw_cuda_unsupported("gemv");
+        }
 
         const auto& Ash = A.shape();
         const auto& xsh = x.shape();
@@ -323,6 +329,13 @@ namespace cpptensor {
     }
 
     Tensor gemm(const Tensor& A, const Tensor& B) {
+        if (A.device_type() != B.device_type()) {
+            throw std::runtime_error("gemm: device mismatch");
+        }
+        if (A.device_type() == DeviceType::CUDA) {
+            throw_cuda_unsupported("gemm");
+        }
+
         size_t M = A.shape()[0];
         size_t K = A.shape()[1];
         size_t KB = B.shape()[0];
