@@ -19,6 +19,22 @@ View-producing operations:
 - `squeeze(...)`, `unsqueeze(...)`
 - `permute(...)`, `transpose(...)`
 
+### Backing storage vs logical layout
+
+`cpptensor` distinguishes two separate concepts:
+
+- **Backing storage**: the owned/raw memory region (`std::vector` or wrapped pointer).
+- **Logical tensor layout**: the value order implied by `shape + stride + offset`.
+
+For non-contiguous views, these are not the same. Public tensor APIs therefore follow:
+
+- `Tensor::data() const` returns **logical row-major values** (materialized when needed).
+- `Tensor::data()` mutable is restricted to direct compact backing storage only.
+- `clone()` and `contiguous()` always preserve logical value order.
+- CPU kernels consume logical flattened buffers for correctness.
+- CUDA `add`/`mul` currently use an explicit contiguous fallback for non-contiguous inputs
+  before launching compact-layout kernels.
+
 ---
 
 ## Data access contract
