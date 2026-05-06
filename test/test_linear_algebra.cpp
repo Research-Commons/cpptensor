@@ -14,7 +14,7 @@
 
 namespace {
 
-std::vector<float> materialize_matrix(const cpptensor::Tensor& tensor) {
+[[maybe_unused]] std::vector<float> materialize_matrix(const cpptensor::Tensor& tensor) {
     const auto& shape = tensor.shape();
     if (shape.size() != 2) {
         throw std::runtime_error("materialize_matrix: expected rank-2 tensor");
@@ -32,7 +32,7 @@ std::vector<float> materialize_matrix(const cpptensor::Tensor& tensor) {
     return matrix;
 }
 
-double frobenius_norm(const std::vector<float>& values) {
+[[maybe_unused]] double frobenius_norm(const std::vector<float>& values) {
     double sum = 0.0;
     for (float value : values) {
         sum += static_cast<double>(value) * static_cast<double>(value);
@@ -40,8 +40,8 @@ double frobenius_norm(const std::vector<float>& values) {
     return std::sqrt(sum);
 }
 
-double svd_relative_reconstruction_error(const cpptensor::Tensor& input,
-                                         const cpptensor::SVDResult& result) {
+[[maybe_unused]] double svd_relative_reconstruction_error(const cpptensor::Tensor& input,
+                                                          const cpptensor::SVDResult& result) {
     const auto input_shape = input.shape();
     const size_t rows = input_shape[0];
     const size_t cols = input_shape[1];
@@ -72,7 +72,7 @@ double svd_relative_reconstruction_error(const cpptensor::Tensor& input,
     return frobenius_norm(diff) / std::max(1.0, frobenius_norm(original));
 }
 
-double column_orthogonality_error(const cpptensor::Tensor& matrix) {
+[[maybe_unused]] double column_orthogonality_error(const cpptensor::Tensor& matrix) {
     const auto shape = matrix.shape();
     const auto data = materialize_matrix(matrix);
 
@@ -91,7 +91,7 @@ double column_orthogonality_error(const cpptensor::Tensor& matrix) {
     return max_error;
 }
 
-double row_orthogonality_error(const cpptensor::Tensor& matrix) {
+[[maybe_unused]] double row_orthogonality_error(const cpptensor::Tensor& matrix) {
     const auto shape = matrix.shape();
     const auto data = materialize_matrix(matrix);
 
@@ -110,8 +110,8 @@ double row_orthogonality_error(const cpptensor::Tensor& matrix) {
     return max_error;
 }
 
-double symmetric_eig_max_relative_residual(const cpptensor::Tensor& input,
-                                           const cpptensor::EigResult& result) {
+[[maybe_unused]] double symmetric_eig_max_relative_residual(const cpptensor::Tensor& input,
+                                                            const cpptensor::EigResult& result) {
     const auto shape = input.shape();
     const size_t n = shape[0];
 
@@ -146,8 +146,8 @@ double symmetric_eig_max_relative_residual(const cpptensor::Tensor& input,
     return max_error;
 }
 
-double general_eig_max_relative_residual(const cpptensor::Tensor& input,
-                                         const cpptensor::EigResult& result) {
+[[maybe_unused]] double general_eig_max_relative_residual(const cpptensor::Tensor& input,
+                                                          const cpptensor::EigResult& result) {
     const auto shape = input.shape();
     const size_t n = shape[0];
 
@@ -231,7 +231,6 @@ double general_eig_max_relative_residual(const cpptensor::Tensor& input,
 } // namespace
 
 #ifdef USE_OPENBLAS
-
 TEST_CASE("svd reconstructs representative matrices and accepts non-contiguous views",
           "[linear-algebra][svd]") {
     cpptensor::Tensor source({4, 4},

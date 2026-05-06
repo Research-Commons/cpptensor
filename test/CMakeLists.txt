@@ -62,17 +62,32 @@ if(CMAKE_GENERATOR)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
     )
 
-    add_test(
-        NAME cmake_package_consumer_smoke
-        COMMAND ${CMAKE_COMMAND}
-            -DPRODUCER_BUILD_DIR=${CMAKE_BINARY_DIR}
-            -DCONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/package_consumer
-            -DGENERATOR=${CMAKE_GENERATOR}
-            -DBUILD_CONFIG=$<CONFIG>
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_package_consumer_smoke.cmake
-    )
+    if(NOT CPPTENSOR_SANITIZER_REQUESTED)
+        add_test(
+            NAME cmake_package_consumer_smoke
+            COMMAND ${CMAKE_COMMAND}
+                -DPRODUCER_BUILD_DIR=${CMAKE_BINARY_DIR}
+                -DCONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/package_consumer
+                -DGENERATOR=${CMAKE_GENERATOR}
+                -DBUILD_CONFIG=$<CONFIG>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_package_consumer_smoke.cmake
+        )
+    endif()
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_test(
+            NAME cmake_configure_enables_strict_warning_profile
+            COMMAND ${CMAKE_COMMAND}
+                -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-strict-warnings
+                -DGENERATOR=${CMAKE_GENERATOR}
+                -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+                -DPROCESSOR=${CMAKE_SYSTEM_PROCESSOR}
+                -DCONFIGURE_OPTIONS=-DCPPTENSOR_ENABLE_STRICT_WARNINGS=ON\;-DCPPTENSOR_WARNINGS_AS_ERRORS=ON
+                -DREQUIRED_PATTERNS=Strict\ warnings\ profile:\ ON;warnings-as-errors=ON
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+        )
+
         add_test(
             NAME cmake_configure_enables_asan_ubsan_flags
             COMMAND ${CMAKE_COMMAND}

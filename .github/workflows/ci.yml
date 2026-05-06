@@ -63,6 +63,7 @@ jobs:
           conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
+            -DCPPTENSOR_BUILD_TESTS=ON \
             -DBUILD_CUDA=OFF \
             -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
             -DBUILD_AVX2=OFF \
@@ -86,7 +87,7 @@ jobs:
           BUILD_DIR: build/${{ matrix.name }}
         run: |
           set -euo pipefail
-          conda run -n cpptensor ctest --test-dir "${BUILD_DIR}" --output-on-failure 2>&1 | tee "${BUILD_DIR}/ctest.log"
+          conda run -n cpptensor ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error 2>&1 | tee "${BUILD_DIR}/ctest.log"
 
       - name: Upload logs on failure
         if: failure()
@@ -181,6 +182,80 @@ jobs:
             build/${{ matrix.name }}/build.log
             build/${{ matrix.name }}/CMakeFiles/CMakeOutput.log
             build/${{ matrix.name }}/CMakeFiles/CMakeError.log
+
+  sanitizer-warning-gate:
+    name: Sanitizer + warning gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: cpptensor
+          environment-file: environment.yml
+          auto-activate: false
+          conda-remove-defaults: true
+          use-mamba: true
+
+      - name: Configure sanitizer build
+        env:
+          BUILD_DIR: build/sanitizer-warning-gate
+        run: |
+          set -euo pipefail
+          mkdir -p "${BUILD_DIR}"
+          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCPPTENSOR_BUILD_TESTS=ON \
+            -DBUILD_CUDA=OFF \
+            -DUSE_OPENBLAS=OFF \
+            -DBUILD_AVX2=OFF \
+            -DBUILD_AVX512=OFF \
+            -DCPPTENSOR_ENABLE_ASAN=ON \
+            -DCPPTENSOR_ENABLE_UBSAN=ON \
+            -DCPPTENSOR_ENABLE_STRICT_WARNINGS=ON \
+            -DCPPTENSOR_WARNINGS_AS_ERRORS=ON 2>&1 | tee "${BUILD_DIR}/configure.log"
+          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
+          echo "Configured C++ compiler: ${actual_cxx}" | tee -a "${BUILD_DIR}/configure.log"
+          if [[ "${actual_cxx##*/}" != "g++" ]]; then
+            echo "::error::Expected C++ compiler 'g++' but CMake configured '${actual_cxx}'." | tee -a "${BUILD_DIR}/configure.log"
+            exit 1
+          fi
+
+      - name: Build sanitizer targets
+        env:
+          BUILD_DIR: build/sanitizer-warning-gate
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor cmake --build "${BUILD_DIR}" --parallel 2>&1 | tee "${BUILD_DIR}/build.log"
+
+      - name: Test sanitizer targets
+        env:
+          BUILD_DIR: build/sanitizer-warning-gate
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor ctest --test-dir "${BUILD_DIR}" --output-on-failure --no-tests=error 2>&1 | tee "${BUILD_DIR}/ctest.log"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-sanitizer-warning-gate
+          if-no-files-found: ignore
+          path: |
+            build/sanitizer-warning-gate/configure.log
+            build/sanitizer-warning-gate/build.log
+            build/sanitizer-warning-gate/ctest.log
+            build/sanitizer-warning-gate/CMakeFiles/CMakeOutput.log
+            build/sanitizer-warning-gate/CMakeFiles/CMakeError.log
+            build/sanitizer-warning-gate/Testing/Temporary/LastTest.log
 
   optional-cuda-build:
     name: Optional CUDA leg (non-blocking)

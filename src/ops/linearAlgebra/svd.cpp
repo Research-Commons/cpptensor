@@ -13,6 +13,7 @@
 namespace cpptensor {
 namespace {
 
+#ifdef USE_OPENBLAS
 std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
     const auto& shape = matrix.shape();
     const auto& stride = matrix.stride();
@@ -29,6 +30,7 @@ std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
     }
     return buffer;
 }
+#endif
 
 } // namespace
 
@@ -46,13 +48,12 @@ SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
 
     const int M = static_cast<int>(shape[0]);
     const int N = static_cast<int>(shape[1]);
-    const int K = std::min(M, N);
-
     if (M == 0 || N == 0) {
         throw std::runtime_error("svd: matrix dimensions cannot be zero");
     }
 
 #ifdef USE_OPENBLAS
+    const int K = std::min(M, N);
     std::vector<float> a_copy = copy_matrix_to_row_major_buffer(A);
     std::vector<float> singular_values(K);
 
@@ -107,6 +108,8 @@ SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
 
     return result;
 #else
+    (void)full_matrices;
+    (void)compute_uv;
     throw std::runtime_error(
         "svd: requires OpenBLAS/LAPACK library.\n"
         "Please rebuild with: cmake -DUSE_OPENBLAS=ON ..\n"
