@@ -615,6 +615,35 @@ TEST_CASE("comparison operators support tensor, scalar, and broadcast operands",
     require_data(a < row, {0, 1, 1, 0, 0, 1});
 }
 
+TEST_CASE("runtime ISA override clamps to host capabilities", "[dispatch][isa]") {
+    cpptensor::initialize_kernels();
+
+    {
+        ScopedCpuIsaOverride force_generic("generic");
+        REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::GENERIC);
+    }
+
+    {
+        ScopedCpuIsaOverride force_avx2("avx2");
+        if (cpptensor::has_avx2()) {
+            REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::AVX2);
+        } else {
+            REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::GENERIC);
+        }
+    }
+
+    {
+        ScopedCpuIsaOverride force_avx512("avx512");
+        if (cpptensor::has_avx512f()) {
+            REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::AVX512);
+        } else if (cpptensor::has_avx2()) {
+            REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::AVX2);
+        } else {
+            REQUIRE(cpptensor::detect_best_cpu_isa() == CpuIsa::GENERIC);
+        }
+    }
+}
+
 TEST_CASE("comparison operators honor the runtime ISA override on same-shape CPU tensors",
           "[comparison][dispatch]") {
     cpptensor::initialize_kernels();

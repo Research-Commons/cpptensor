@@ -1,8 +1,24 @@
+option(CPPTENSOR_REGISTER_BENCHMARK_TESTS
+    "Register benchmark smoke tests with CTest (ISA tests auto-skip with code 77 on unsupported hosts)"
+    OFF)
+
+function(cpptensor_register_benchmark_smoke_test target_name)
+    if(NOT CPPTENSOR_REGISTER_BENCHMARK_TESTS)
+        return()
+    endif()
+
+    add_test(
+        NAME benchmark_smoke_${target_name}
+        COMMAND ${target_name} --benchmark_filter=BM_Add --benchmark_min_time=0.001
+    )
+endfunction()
+
 # ==== CPU benchmark ====
 add_executable(cpptensor_bench_cpu cpu_bench.cpp)
 target_link_libraries(cpptensor_bench_cpu PRIVATE cpptensor benchmark::benchmark benchmark::benchmark_main)
 cpptensor_apply_build_profile(cpptensor_bench_cpu)
 cpptensor_apply_build_safety_flags(cpptensor_bench_cpu)
+cpptensor_register_benchmark_smoke_test(cpptensor_bench_cpu)
 
 # ==== AVX2 benchmark ====
 if (CPPTENSOR_ENABLE_AVX2)
@@ -11,6 +27,10 @@ if (CPPTENSOR_ENABLE_AVX2)
     target_compile_options(cpptensor_bench_avx2 PRIVATE ${CPPTENSOR_AVX2_COMPILE_FLAGS})
     cpptensor_apply_build_profile(cpptensor_bench_avx2)
     cpptensor_apply_build_safety_flags(cpptensor_bench_avx2)
+    cpptensor_register_benchmark_smoke_test(cpptensor_bench_avx2)
+    if(CPPTENSOR_REGISTER_BENCHMARK_TESTS)
+        set_tests_properties(benchmark_smoke_cpptensor_bench_avx2 PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 # ==== AVX512 benchmark ====
@@ -20,6 +40,10 @@ if (CPPTENSOR_ENABLE_AVX512)
     target_compile_options(cpptensor_bench_avx512 PRIVATE ${CPPTENSOR_AVX512_COMPILE_FLAGS})
     cpptensor_apply_build_profile(cpptensor_bench_avx512)
     cpptensor_apply_build_safety_flags(cpptensor_bench_avx512)
+    cpptensor_register_benchmark_smoke_test(cpptensor_bench_avx512)
+    if(CPPTENSOR_REGISTER_BENCHMARK_TESTS)
+        set_tests_properties(benchmark_smoke_cpptensor_bench_avx512 PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 # ==== CUDA benchmark ====
@@ -29,4 +53,5 @@ if (BUILD_CUDA)
     set_target_properties(cpptensor_bench_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     cpptensor_apply_build_profile(cpptensor_bench_cuda)
     cpptensor_apply_build_safety_flags(cpptensor_bench_cuda)
+    cpptensor_register_benchmark_smoke_test(cpptensor_bench_cuda)
 endif()
