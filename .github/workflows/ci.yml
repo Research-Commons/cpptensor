@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   cpu-build-test:
     name: CPU build/test (${{ matrix.name }})
@@ -45,7 +48,8 @@ jobs:
         with:
           activate-environment: cpptensor
           environment-file: environment.yml
-          auto-activate-base: false
+          auto-activate: false
+          conda-remove-defaults: true
           use-mamba: true
 
       - name: Show selected compiler versions
@@ -137,7 +141,8 @@ jobs:
         with:
           activate-environment: cpptensor
           environment-file: environment.yml
-          auto-activate-base: false
+          auto-activate: false
+          conda-remove-defaults: true
           use-mamba: true
 
       - name: Configure
@@ -190,7 +195,8 @@ jobs:
         with:
           activate-environment: cpptensor
           environment-file: environment.yml
-          auto-activate-base: false
+          auto-activate: false
+          conda-remove-defaults: true
           use-mamba: true
 
       - name: Install CUDA toolkit
@@ -211,6 +217,7 @@ jobs:
           conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_CUDA=ON \
+            -DCMAKE_CUDA_FLAGS=--allow-unsupported-compiler \
             -DUSE_OPENBLAS=ON \
             -DBUILD_AVX2=OFF \
             -DBUILD_AVX512=OFF 2>&1 | tee "${BUILD_DIR}/configure.log"
