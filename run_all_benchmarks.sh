@@ -48,7 +48,7 @@ if [[ "${FAIL_ON_MISSING_BINARY:-0}" == "1" ]]; then
 fi
 
 for extra_arg in "$@"; do
-  HARNESS_CMD+=(--extra-benchmark-arg "${extra_arg}")
+  HARNESS_CMD+=("--extra-benchmark-arg=${extra_arg}")
 done
 
 echo "[cpptensor-bench] Collecting structured benchmark results..."
