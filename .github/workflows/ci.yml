@@ -205,6 +205,12 @@ jobs:
           cuda: '12.5.0'
           method: network
 
+      - name: Install CUDA-compatible host compiler
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gcc-13 g++-13
+
       - name: Show nvcc version
         run: nvcc --version
 
@@ -214,9 +220,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${BUILD_DIR}"
-          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+          CC=/usr/bin/gcc-13 CXX=/usr/bin/g++-13 conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=/usr/bin/g++-13 \
             -DBUILD_CUDA=ON \
+            -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-13 \
             -DCMAKE_CUDA_FLAGS=--allow-unsupported-compiler \
             -DUSE_OPENBLAS=ON \
             -DBUILD_AVX2=OFF \
