@@ -135,6 +135,11 @@ namespace cpptensor {
 
         ~TensorImpl();
 
+        TensorImpl(const TensorImpl&) = delete;
+        TensorImpl& operator=(const TensorImpl&) = delete;
+        TensorImpl(TensorImpl&&) = delete;
+        TensorImpl& operator=(TensorImpl&&) = delete;
+
         // =============== Data Accessors ===============
 
         /**

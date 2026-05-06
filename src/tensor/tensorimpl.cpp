@@ -341,6 +341,32 @@ namespace cpptensor {
     }
 
     std::shared_ptr<TensorImpl> TensorImpl::copy_to(DeviceType dev) const {
+#ifdef BUILD_CUDA
+        if (dev == DeviceType::CUDA &&
+            device_ == DeviceType::CUDA &&
+            !base_impl_ &&
+            data_ptr_ == nullptr &&
+            has_row_major_stride(shape_, stride_)) {
+            ensure_resident(DeviceType::CUDA);
+
+            auto copied = std::make_shared<TensorImpl>(shape_, 0.0f, DeviceType::CPU);
+            copied->device_ = DeviceType::CUDA;
+            copied->host_data_valid_ = false;
+            copied->cuda_data_valid_ = false;
+            copied->ensure_resident(DeviceType::CUDA);
+
+            const size_t bytes = numel() * sizeof(float);
+            if (bytes != 0) {
+                cuda_check(cudaMemcpy(copied->cuda_data_, cuda_data_, bytes, cudaMemcpyDeviceToDevice),
+                           "device-to-device copy");
+            }
+
+            copied->cuda_data_valid_ = true;
+            copied->host_data_valid_ = false;
+            return copied;
+        }
+#endif
+
         std::vector<float> logical;
         materialize_logical_data(logical);
 
