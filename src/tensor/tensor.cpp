@@ -114,6 +114,98 @@ namespace cpptensor {
             return a * b;
         }
 
+        struct NormalizedSlice {
+            int64_t start = 0;
+            int64_t stop = 0;
+            int64_t step = 1;
+            size_t length = 0;
+        };
+
+        int64_t normalize_scalar_index(int64_t index,
+                                       int64_t dim_size,
+                                       const char* op_name) {
+            int64_t normalized = index;
+            if (normalized < 0) {
+                normalized += dim_size;
+            }
+
+            if (normalized < 0 || normalized >= dim_size) {
+                throw std::runtime_error(std::string(op_name) + ": scalar index " +
+                                         std::to_string(index) + " out of bounds for dimension size " +
+                                         std::to_string(dim_size));
+            }
+
+            return normalized;
+        }
+
+        NormalizedSlice normalize_slice_spec(const Tensor::SliceSpec& slice,
+                                             int64_t dim_size,
+                                             const char* op_name) {
+            const int64_t step = slice.step.value_or(1);
+            if (step == 0) {
+                throw std::runtime_error(std::string(op_name) + ": slice step cannot be zero");
+            }
+
+            if (step > 0) {
+                int64_t start = slice.start.value_or(0);
+                int64_t stop = slice.end.value_or(dim_size);
+
+                if (start < 0) start += dim_size;
+                if (stop < 0) stop += dim_size;
+
+                start = std::clamp(start, int64_t{0}, dim_size);
+                stop = std::clamp(stop, int64_t{0}, dim_size);
+
+                size_t length = 0;
+                if (start < stop) {
+                    const int64_t span = stop - start;
+                    length = static_cast<size_t>((span + step - 1) / step);
+                }
+
+                return NormalizedSlice{
+                    .start = start,
+                    .stop = stop,
+                    .step = step,
+                    .length = length,
+                };
+            }
+
+            int64_t start = slice.start.value_or(dim_size - 1);
+            int64_t stop = slice.end.value_or(-1);
+
+            if (slice.start.has_value() && start < 0) {
+                start += dim_size;
+            }
+            if (slice.start.has_value()) {
+                start = std::clamp(start, int64_t{-1}, dim_size - 1);
+            } else if (dim_size == 0) {
+                start = -1;
+            }
+
+            if (slice.end.has_value() && stop < 0) {
+                stop += dim_size;
+            }
+            if (slice.end.has_value()) {
+                stop = std::clamp(stop, int64_t{-1}, dim_size - 1);
+            } else {
+                stop = -1;
+            }
+
+            size_t length = 0;
+            if (start > stop) {
+                const int64_t span = start - stop;
+                const int64_t abs_step = -step;
+                length = static_cast<size_t>((span + abs_step - 1) / abs_step);
+            }
+
+            return NormalizedSlice{
+                .start = start,
+                .stop = stop,
+                .step = step,
+                .length = length,
+            };
+        }
+
         std::vector<float> copy_logical_data(const Tensor& tensor) {
             const auto sh = tensor.shape();
             const auto& st = tensor.stride();
@@ -402,10 +494,9 @@ namespace cpptensor {
                          std::optional<int64_t> start,
                          std::optional<int64_t> end,
                          std::optional<int64_t> step) const {
-        const auto impl = require_impl(__func__);
+        require_impl(__func__);
         const int rank = static_cast<int>(ndim());
 
-        // Normalize negative dimension
         int norm_dim = dim;
         if (norm_dim < 0) {
             norm_dim += rank;
@@ -416,61 +507,146 @@ namespace cpptensor {
                                    " out of range for tensor with " + std::to_string(rank) + " dimensions");
         }
 
-        auto new_shape = shape();
-        const auto& base_stride = impl->stride();
-        std::vector<size_t> new_stride = base_stride;
+        std::vector<IndexSpec> specs(static_cast<size_t>(rank), IndexSpec(SliceSpec{}));
+        specs[static_cast<size_t>(norm_dim)] = SliceSpec(start, end, step);
+        return index(specs);
+    }
 
-        const int64_t dim_size = static_cast<int64_t>(new_shape[norm_dim]);
+    Tensor Tensor::index(const std::vector<IndexSpec>& indices) const {
+        const auto impl = require_impl(__func__);
+        const auto& src_shape = impl->shape();
+        const auto& src_stride = impl->stride();
+        const int rank = static_cast<int>(src_shape.size());
 
-        // Default step is 1
-        const int64_t step_value = step.value_or(1);
-        if (step_value <= 0) {
-            throw std::runtime_error("slice: step must be positive, got " + std::to_string(step_value));
+        if (static_cast<int>(indices.size()) > rank) {
+            throw std::runtime_error("index: received " + std::to_string(indices.size()) +
+                                     " indices for tensor with rank " + std::to_string(rank));
         }
 
-        // Helper function to clamp indices to valid range
-        const auto clamp_index = [dim_size](int64_t idx) -> int64_t {
-            if (dim_size == 0) {
-                return 0;
-            }
-            // Handle negative indices (Python-style)
-            if (idx < 0) {
-                idx += dim_size;
-            }
-            // Clamp to valid range [0, dim_size]
-            if (idx < 0) {
-                idx = 0;
-            }
-            if (idx > dim_size) {
-                idx = dim_size;
-            }
-            return idx;
+        struct AxisPlan {
+            bool is_scalar = false;
+            int64_t scalar_index = 0;
+            int64_t start = 0;
+            int64_t step = 1;
+            size_t length = 0;
+            bool has_negative_step = false;
         };
 
-        // Normalize start and end indices
-        int64_t start_idx = clamp_index(start.value_or(0));
-        int64_t end_idx = clamp_index(end.value_or(dim_size));
+        std::vector<AxisPlan> axis_plans(static_cast<size_t>(rank));
+        bool has_negative_step = false;
 
-        // Compute slice length
-        size_t slice_len = 0;
-        if (end_idx > start_idx && dim_size > 0) {
-            const int64_t distance = end_idx - start_idx;
-            slice_len = static_cast<size_t>((distance + step_value - 1) / step_value);
+        for (int axis = 0; axis < rank; ++axis) {
+            const int64_t dim_size = static_cast<int64_t>(src_shape[static_cast<size_t>(axis)]);
+            const bool user_provided = static_cast<size_t>(axis) < indices.size();
+            const IndexSpec spec = user_provided
+                ? indices[static_cast<size_t>(axis)]
+                : IndexSpec(SliceSpec{});
+
+            AxisPlan plan;
+            if (std::holds_alternative<int64_t>(spec.value)) {
+                plan.is_scalar = true;
+                plan.scalar_index = normalize_scalar_index(std::get<int64_t>(spec.value), dim_size, "index");
+                axis_plans[static_cast<size_t>(axis)] = plan;
+                continue;
+            }
+
+            const auto normalized = normalize_slice_spec(std::get<SliceSpec>(spec.value), dim_size, "index");
+            plan.start = normalized.start;
+            plan.step = normalized.step;
+            plan.length = normalized.length;
+            plan.has_negative_step = normalized.step < 0;
+            has_negative_step = has_negative_step || plan.has_negative_step;
+
+            axis_plans[static_cast<size_t>(axis)] = plan;
         }
 
-        // Update shape and stride for sliced dimension
-        new_shape[norm_dim] = slice_len;
-        new_stride[norm_dim] = base_stride[norm_dim] * static_cast<size_t>(step_value);
+        if (!has_negative_step) {
+            std::vector<size_t> out_shape;
+            std::vector<size_t> out_stride;
+            out_shape.reserve(src_shape.size());
+            out_stride.reserve(src_shape.size());
 
-        // Calculate offset from base data
-        size_t offset_delta = 0;
-        if (dim_size > 0 && start_idx > 0) {
-            offset_delta = static_cast<size_t>(start_idx) * base_stride[norm_dim];
+            size_t offset_delta = 0;
+            for (int axis = 0; axis < rank; ++axis) {
+                const auto& plan = axis_plans[static_cast<size_t>(axis)];
+                const size_t axis_stride = src_stride[static_cast<size_t>(axis)];
+
+                if (plan.is_scalar) {
+                    offset_delta += static_cast<size_t>(plan.scalar_index) * axis_stride;
+                    continue;
+                }
+
+                if (plan.length > 0 && plan.start > 0) {
+                    offset_delta += static_cast<size_t>(plan.start) * axis_stride;
+                }
+
+                out_shape.push_back(plan.length);
+                out_stride.push_back(axis_stride * static_cast<size_t>(plan.step));
+            }
+
+            auto view_impl = std::make_shared<TensorImpl>(impl, out_shape, out_stride, offset_delta);
+            return Tensor(std::move(view_impl));
         }
 
-        // Create view with modified shape, stride, and offset
-        auto view_impl = std::make_shared<TensorImpl>(impl, new_shape, new_stride, offset_delta);
-        return Tensor(std::move(view_impl));
+        std::vector<size_t> out_shape;
+        out_shape.reserve(src_shape.size());
+        for (int axis = 0; axis < rank; ++axis) {
+            const auto& plan = axis_plans[static_cast<size_t>(axis)];
+            if (!plan.is_scalar) {
+                out_shape.push_back(plan.length);
+            }
+        }
+
+        size_t out_numel = 1;
+        for (const size_t d : out_shape) {
+            out_numel *= d;
+        }
+
+        std::vector<float> out_data(out_numel, 0.0f);
+        const float* src = impl->data_ptr();
+
+        if (out_numel > 0) {
+            std::vector<size_t> out_indices(out_shape.size(), 0);
+            for (size_t out_linear = 0; out_linear < out_numel; ++out_linear) {
+                int64_t src_offset = 0;
+                size_t out_axis = 0;
+
+                for (int axis = 0; axis < rank; ++axis) {
+                    const auto& plan = axis_plans[static_cast<size_t>(axis)];
+                    int64_t src_index = 0;
+
+                    if (plan.is_scalar) {
+                        src_index = plan.scalar_index;
+                    } else {
+                        src_index = plan.start +
+                                    static_cast<int64_t>(out_indices[out_axis]) * plan.step;
+                        ++out_axis;
+                    }
+
+                    src_offset += src_index * static_cast<int64_t>(src_stride[static_cast<size_t>(axis)]);
+                }
+
+                if (src_offset < 0) {
+                    throw std::runtime_error("index: internal error produced negative source offset");
+                }
+
+                out_data[out_linear] = src[static_cast<size_t>(src_offset)];
+
+                for (int d = static_cast<int>(out_shape.size()) - 1; d >= 0; --d) {
+                    const size_t dim = static_cast<size_t>(d);
+                    if (++out_indices[dim] < out_shape[dim]) {
+                        break;
+                    }
+                    out_indices[dim] = 0;
+                }
+            }
+        }
+
+        return Tensor(out_shape, out_data, device_type());
+    }
+
+    Tensor Tensor::index(std::initializer_list<IndexSpec> indices) const {
+        return index(std::vector<IndexSpec>(indices.begin(), indices.end()));
     }
 
     Tensor Tensor::squeeze(int dim) const {

@@ -5,6 +5,7 @@ This document explains the zero-copy view architecture implementation in cpptens
 ## Table of Contents
 
 - [Overview](#overview)
+- [Tuple-Style Indexing and Slicing](#tuple-style-indexing-and-slicing)
 - [Core Architecture Changes](#core-architecture-changes)
 - [The `base_impl_` Design](#the-base_impl_-design)
 - [Tensor Manipulation Functions](#tensor-manipulation-functions)
@@ -23,6 +24,42 @@ cpptensor implements a **PyTorch-style zero-copy view architecture** for tensor 
 - ✅ **Automatic memory management**: Safe shared ownership via `shared_ptr`
 - ✅ **PyTorch compatibility**: Familiar API and semantics
 - ✅ **Contiguity tracking**: Automatic detection and handling of memory layout
+
+---
+
+## Tuple-Style Indexing and Slicing
+
+Issue #19 adds a multi-axis indexing API:
+
+```cpp
+Tensor out = x.index({
+    Tensor::SliceSpec{1, 4},         // axis 0 slice
+    -1,                              // axis 1 scalar selection (drops axis)
+    Tensor::SliceSpec{0, 8, 2},      // axis 2 stepped slice
+});
+```
+
+### Supported patterns
+
+- Multiple axes in one call (`index({...})`)
+- Scalar indexing (`int64_t`) with negative indices
+- Slice indexing (`SliceSpec{start, end, step}`) with negative start/end
+- Negative-step slices (`step < 0`)
+
+### Shape behavior
+
+- Scalar axis selection removes that axis from the output shape.
+- Slice axes remain, with length computed from `[start:end:step]`.
+- Selecting scalar indices on every axis returns a rank-0 tensor (`shape() == {}`).
+
+### View vs copy semantics
+
+- **Zero-copy view path**: all axes are scalar or slice with `step > 0`.
+- **Materialized copy path**: any axis uses `step < 0`.
+
+This keeps aliasing behavior predictable:
+- positive-step indexing/slicing aliases source storage,
+- negative-step indexing/slicing produces an independent compact tensor.
 
 ---
 
