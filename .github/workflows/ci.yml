@@ -23,17 +23,14 @@ jobs:
         include:
           - name: ubuntu-gcc
             os: ubuntu-latest
-            c_compiler: gcc
             cxx_compiler: g++
             use_openblas: ON
           - name: ubuntu-clang
             os: ubuntu-latest
-            c_compiler: clang
             cxx_compiler: clang++
             use_openblas: ON
           - name: macos-clang
             os: macos-latest
-            c_compiler: clang
             cxx_compiler: clang++
             use_openblas: ON
 
@@ -55,23 +52,27 @@ jobs:
       - name: Show selected compiler versions
         run: |
           set -euo pipefail
-          "${{ matrix.c_compiler }}" --version
           "${{ matrix.cxx_compiler }}" --version
 
       - name: Configure
         env:
-          CC: ${{ matrix.c_compiler }}
-          CXX: ${{ matrix.cxx_compiler }}
           BUILD_DIR: build/${{ matrix.name }}
         run: |
           set -euo pipefail
           mkdir -p "${BUILD_DIR}"
           conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DBUILD_CUDA=OFF \
             -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
             -DBUILD_AVX2=OFF \
             -DBUILD_AVX512=OFF 2>&1 | tee "${BUILD_DIR}/configure.log"
+          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
+          echo "Configured C++ compiler: ${actual_cxx}" | tee -a "${BUILD_DIR}/configure.log"
+          if [[ "${actual_cxx##*/}" != "${{ matrix.cxx_compiler }}" ]]; then
+            echo "::error::Expected C++ compiler '${{ matrix.cxx_compiler }}' but CMake configured '${actual_cxx}'." | tee -a "${BUILD_DIR}/configure.log"
+            exit 1
+          fi
 
       - name: Build
         env:
@@ -110,21 +111,18 @@ jobs:
         include:
           - name: linux-openblas-off
             os: ubuntu-latest
-            c_compiler: gcc
             cxx_compiler: g++
             use_openblas: OFF
             build_avx2: OFF
             build_avx512: OFF
           - name: linux-avx2-on
             os: ubuntu-latest
-            c_compiler: clang
             cxx_compiler: clang++
             use_openblas: ON
             build_avx2: ON
             build_avx512: OFF
           - name: linux-avx512-on
             os: ubuntu-latest
-            c_compiler: gcc
             cxx_compiler: g++
             use_openblas: ON
             build_avx2: OFF
@@ -147,18 +145,23 @@ jobs:
 
       - name: Configure
         env:
-          CC: ${{ matrix.c_compiler }}
-          CXX: ${{ matrix.cxx_compiler }}
           BUILD_DIR: build/${{ matrix.name }}
         run: |
           set -euo pipefail
           mkdir -p "${BUILD_DIR}"
           conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DBUILD_CUDA=OFF \
             -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
             -DBUILD_AVX2=${{ matrix.build_avx2 }} \
             -DBUILD_AVX512=${{ matrix.build_avx512 }} 2>&1 | tee "${BUILD_DIR}/configure.log"
+          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
+          echo "Configured C++ compiler: ${actual_cxx}" | tee -a "${BUILD_DIR}/configure.log"
+          if [[ "${actual_cxx##*/}" != "${{ matrix.cxx_compiler }}" ]]; then
+            echo "::error::Expected C++ compiler '${{ matrix.cxx_compiler }}' but CMake configured '${actual_cxx}'." | tee -a "${BUILD_DIR}/configure.log"
+            exit 1
+          fi
 
       - name: Build
         env:
