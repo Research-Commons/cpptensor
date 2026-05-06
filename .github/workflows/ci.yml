@@ -67,7 +67,7 @@ jobs:
             -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
             -DBUILD_AVX2=OFF \
             -DBUILD_AVX512=OFF 2>&1 | tee "${BUILD_DIR}/configure.log"
-          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
+          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
           echo "Configured C++ compiler: ${actual_cxx}" | tee -a "${BUILD_DIR}/configure.log"
           if [[ "${actual_cxx##*/}" != "${{ matrix.cxx_compiler }}" ]]; then
             echo "::error::Expected C++ compiler '${{ matrix.cxx_compiler }}' but CMake configured '${actual_cxx}'." | tee -a "${BUILD_DIR}/configure.log"
@@ -156,7 +156,7 @@ jobs:
             -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
             -DBUILD_AVX2=${{ matrix.build_avx2 }} \
             -DBUILD_AVX512=${{ matrix.build_avx512 }} 2>&1 | tee "${BUILD_DIR}/configure.log"
-          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
+          actual_cxx="$(grep '^CMAKE_CXX_COMPILER:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2-)"
           echo "Configured C++ compiler: ${actual_cxx}" | tee -a "${BUILD_DIR}/configure.log"
           if [[ "${actual_cxx##*/}" != "${{ matrix.cxx_compiler }}" ]]; then
             echo "::error::Expected C++ compiler '${{ matrix.cxx_compiler }}' but CMake configured '${actual_cxx}'." | tee -a "${BUILD_DIR}/configure.log"
