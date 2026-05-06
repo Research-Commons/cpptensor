@@ -7,36 +7,37 @@
 
 namespace cpptensor {
 
-    Tensor min(const Tensor& input, int dim, bool keepdim) {
-        // Validate dimension
-        if (dim >= static_cast<int>(input.ndim())) {
-            throw std::invalid_argument(
-                "min: dimension " + std::to_string(dim) +
-                " is out of range for tensor with " +
-                std::to_string(input.ndim()) + " dimensions"
-            );
-        }
+    Tensor min(const Tensor& input, std::optional<int> dim, bool keepdim) {
+        const auto& in_shape = input.shape();
+        const size_t ndim = in_shape.size();
 
-        // Compute output shape
+        int actual_dim = -1;
         std::vector<size_t> out_shape;
-        if (dim < 0) {
-            // Min over all elements
-            if (keepdim) {
-                out_shape = std::vector<size_t>(input.ndim(), 1);
-            } else {
-                out_shape = {};  // Scalar output
-            }
+
+        if (!dim.has_value()) {
+            // Global min: true scalar unless keepdim preserves existing axes.
+            out_shape = keepdim ? std::vector<size_t>(ndim, 1) : std::vector<size_t>{};
         } else {
-            // Min along specific dimension
-            const auto& in_shape = input.shape();
-            for (size_t i = 0; i < in_shape.size(); ++i) {
-                if (static_cast<int>(i) == dim) {
-                    if (keepdim) {
-                        out_shape.push_back(1);
-                    }
-                } else {
-                    out_shape.push_back(in_shape[i]);
-                }
+            int d = dim.value();
+            if (d < 0) {
+                d += static_cast<int>(ndim);
+            }
+
+            if (d < 0 || d >= static_cast<int>(ndim)) {
+                throw std::invalid_argument(
+                    "min: dimension " + std::to_string(dim.value()) +
+                    " is out of range for tensor with " +
+                    std::to_string(ndim) + " dimensions"
+                );
+            }
+
+            actual_dim = d;
+            out_shape = in_shape;
+
+            if (keepdim) {
+                out_shape[static_cast<size_t>(d)] = 1;
+            } else {
+                out_shape.erase(out_shape.begin() + d);
             }
         }
 
@@ -57,7 +58,7 @@ namespace cpptensor {
         }
 
         // Execute kernel
-        kernel(prepared_input, output, dim, keepdim);
+        kernel(prepared_input, output, actual_dim, keepdim);
 
         return output;
     }
