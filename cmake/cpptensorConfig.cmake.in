@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+if(@CPPTENSOR_PACKAGE_NEEDS_OPENBLAS@)
+    find_dependency(OpenBLAS REQUIRED)
+endif()
+
+if(@CPPTENSOR_PACKAGE_NEEDS_CUDA@)
+    find_dependency(CUDAToolkit REQUIRED)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/cpptensorTargets.cmake")
+
+check_required_components(cpptensor)

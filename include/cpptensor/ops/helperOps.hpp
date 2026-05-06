@@ -43,6 +43,10 @@ inline void throw_cuda_unsupported(const char* op_name) {
 }
 
 inline Tensor materialize_for_backend_input(const Tensor& tensor) {
+    // Explicit fallback policy:
+    // backends that are not stride-aware consume contiguous logical layouts.
+    // Contiguous inputs are forwarded zero-copy; non-contiguous views are
+    // materialized into a compact row-major tensor first.
     if (tensor.is_contiguous()) {
         return tensor;
     }
@@ -91,6 +95,7 @@ struct BinaryOpContext {
     std::vector<size_t> output_shape;
     DeviceType device;
     bool use_cpu_broadcast_kernel;
+    DType output_dtype;
 };
 
 inline BinaryOpContext prepareBinaryOp(const Tensor& lhs, const Tensor& rhs) {
@@ -104,15 +109,27 @@ inline BinaryOpContext prepareBinaryOp(const Tensor& lhs, const Tensor& rhs) {
 
     const auto lhs_shape = lhs.shape();
     const auto rhs_shape = rhs.shape();
+
+    const DType lhs_dtype = lhs.dtype();
+    const DType rhs_dtype = rhs.dtype();
+    const DType promoted_dtype = promote_dtype(lhs_dtype, rhs_dtype);
+    if (promoted_dtype != DType::FLOAT32) {
+        throw std::runtime_error(
+            "Binary op kernels currently support float32 compute only; got lhs dtype " +
+            std::string(dtype_name(lhs_dtype)) + " and rhs dtype " + std::string(dtype_name(rhs_dtype)) +
+            ". Cast with astype(float32) before arithmetic.");
+    }
+
     return BinaryOpContext{
         computeBroadcastShape(lhs_shape, rhs_shape),
         lhs_device,
         lhs_device == DeviceType::CPU && needsBroadcast(lhs_shape, rhs_shape),
+        promoted_dtype,
     };
 }
 
 inline Tensor allocateBinaryOpOutput(const BinaryOpContext& context) {
-    return Tensor::full(context.output_shape, 0.0f, context.device);
+    return Tensor::full(context.output_shape, 0.0f, context.device, context.output_dtype);
 }
 
 template <typename CpuBroadcastKernel>

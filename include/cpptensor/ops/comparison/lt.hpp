@@ -5,12 +5,12 @@ namespace cpptensor {
     /**
      * @brief Element-wise less than comparison
      * 
-     * Returns a tensor where each element is 1.0f if the corresponding
-     * element of a is less than b, 0.0f otherwise.
+     * Returns a tensor where each element is true if the corresponding
+     * element of a is less than b , false otherwise.
      * 
      * @param a First tensor
      * @param b Second tensor
-     * @return Tensor with boolean values (1.0f = true, 0.0f = false)
+     * @return Bool tensor (dtype=bool)
      */
     Tensor lt(const Tensor& a, const Tensor& b);
     Tensor lt(const Tensor& a, float scalar);

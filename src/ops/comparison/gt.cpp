@@ -1,20 +1,19 @@
 #include "cpptensor/ops/comparison/gt.hpp"
 
-#include "cpptensor/backend/cpu_backend.h"
-#include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/ops/comparison/comparison_common.hpp"
 
 namespace cpptensor {
 
 Tensor gt(const Tensor& a, const Tensor& b) {
-    return dispatchBinaryOp(a, b, OpType::Gt, CPU::gtKernel);
+    return compare_tensors(a, b, std::greater<float>{});
 }
 
 Tensor gt(const Tensor& a, float scalar) {
-    return gt(a, Tensor::full(a.shape(), scalar, a.device_type()));
+    return gt(a, Tensor::full(a.shape(), scalar, a.device_type(), a.dtype()));
 }
 
 Tensor gt(float scalar, const Tensor& b) {
-    return gt(Tensor::full(b.shape(), scalar, b.device_type()), b);
+    return gt(Tensor::full(b.shape(), scalar, b.device_type(), b.dtype()), b);
 }
 
 Tensor operator>(const Tensor& a, const Tensor& b) {

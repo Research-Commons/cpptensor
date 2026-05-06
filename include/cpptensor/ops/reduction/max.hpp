@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cpptensor/tensor/tensor.hpp"
+#include <optional>
 
 namespace cpptensor {
 
@@ -11,7 +12,7 @@ namespace cpptensor {
      * tensor or along a specific dimension.
      *
      * @param input Input tensor
-     * @param dim Dimension along which to compute max (-1 for all elements)
+     * @param dim Dimension along which to compute max (nullopt = all elements)
      * @param keepdim If true, output has same number of dimensions as input
      * @return Tensor containing maximum values
      *
@@ -23,6 +24,8 @@ namespace cpptensor {
      * Tensor max_dim0_keep = max(A, 0, true); // Max along dim 0, shape: (1, 4)
      * ```
      */
-    Tensor max(const Tensor& input, int dim = -1, bool keepdim = false);
+    Tensor max(const Tensor& input,
+               std::optional<int> dim = std::nullopt,
+               bool keepdim = false);
 
 } // namespace cpptensor
