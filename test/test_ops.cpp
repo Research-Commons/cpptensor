@@ -368,6 +368,12 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
 }
 
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
@@ -537,6 +543,12 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
