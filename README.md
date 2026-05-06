@@ -89,6 +89,19 @@ process can call `A + B`, `sum()`, `matmul()`, and other registered ops without
 calling `initialize_kernels()` manually. `initialize_kernels()` remains available
 as an optional explicit warm-up step.
 
+# numerical stability policy
+`sum()`, `mean()`, and `dot()` prioritize accumulation accuracy over raw
+throughput on cancellation-heavy inputs:
+
+- CPU reductions use widened compensated accumulation before casting back to
+  `float`.
+- AVX runtime dispatch still uses optimized paths for pointwise and matmul-style
+  kernels, but `sum`/`mean` route through the stable reduction implementation.
+- `dot()` kernels accumulate products in widened precision before casting the
+  scalar result back to `float`.
+
+This trades some peak reduction throughput for better numerical robustness.
+
 # dtype support
 `Tensor` now tracks element dtype metadata (`bool`, `int32`, `float32`, `float64`).
 Comparison operators produce `bool` tensors, and dtype is preserved across views,

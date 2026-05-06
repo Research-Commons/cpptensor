@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include "cpptensor/tensor/tensor.hpp"
@@ -290,26 +291,58 @@ namespace cpptensor{
         const float* b = B.data().data();
         const std::int64_t n = static_cast<std::int64_t>(A.shape()[0]);
 
-        __m512 vacc = _mm512_setzero_ps();
+        __m512d vacc_lo = _mm512_setzero_pd();
+        __m512d vacc_hi = _mm512_setzero_pd();
         std::int64_t i = 0;
         constexpr int stride = 16;
         for (; i + stride <= n; i += stride) {
             __m512 va = _mm512_loadu_ps(a + i);
             __m512 vb = _mm512_loadu_ps(b + i);
-            vacc = _mm512_fmadd_ps(va, vb, vacc); // FMA accumulate
+            __m512 prod = _mm512_mul_ps(va, vb);
+            __m256 prod_lo = _mm512_castps512_ps256(prod);
+            __m256 prod_hi = _mm512_extractf32x8_ps(prod, 1);
+            vacc_lo = _mm512_add_pd(vacc_lo, _mm512_cvtps_pd(prod_lo));
+            vacc_hi = _mm512_add_pd(vacc_hi, _mm512_cvtps_pd(prod_hi));
         }
 
-        // Reduce 512 -> two 256 then scalar
-        __m256 lo = _mm512_castps512_ps256(vacc);
-        __m256 hi = _mm512_extractf32x8_ps(vacc, 1);
-        float sum = hsum256(lo) + hsum256(hi);
+        alignas(64) double lane_lo[8];
+        alignas(64) double lane_hi[8];
+        _mm512_store_pd(lane_lo, vacc_lo);
+        _mm512_store_pd(lane_hi, vacc_hi);
+
+        double sum = 0.0;
+        double compensation = 0.0;
+        auto compensated_add = [&](double value) {
+            if (!std::isfinite(value) || !std::isfinite(sum) || !std::isfinite(compensation)) {
+                sum += value;
+                compensation = 0.0;
+                return;
+            }
+
+            const double adjusted = value - compensation;
+            const double next = sum + adjusted;
+            if (!std::isfinite(next)) {
+                sum = next;
+                compensation = 0.0;
+                return;
+            }
+            compensation = (next - sum) - adjusted;
+            sum = next;
+        };
+
+        for (double value : lane_lo) {
+            compensated_add(value);
+        }
+        for (double value : lane_hi) {
+            compensated_add(value);
+        }
 
         // Remainder
         for (; i < n; ++i) {
-            sum += a[i] * b[i];
+            compensated_add(static_cast<double>(a[i]) * static_cast<double>(b[i]));
         }
 
-        Out.data()[0] = sum;
+        Out.data()[0] = static_cast<float>(sum);
     }
 
     // ============================================================================

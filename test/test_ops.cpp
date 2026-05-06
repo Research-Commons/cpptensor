@@ -290,6 +290,22 @@ float expected_pow_domain_semantics(float base, float exponent) {
     return std::pow(base, exponent);
 }
 
+float naive_sum_f32(const std::vector<float>& values) {
+    float total = 0.0f;
+    for (float value : values) {
+        total += value;
+    }
+    return total;
+}
+
+float naive_dot_f32(const std::vector<float>& lhs, const std::vector<float>& rhs) {
+    float total = 0.0f;
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        total += lhs[i] * rhs[i];
+    }
+    return total;
+}
+
 void require_broadcast_arithmetic_results() {
     cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor row({1, 3}, {10, 20, 30});
@@ -903,6 +919,74 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.max(0), {4, 5, 6});
     require_shape(t.min(-1), {2});
     require_data(t.min(-1), {1, 4});
+}
+
+TEST_CASE("sum mean and dot use numerically safer accumulation on adversarial inputs",
+          "[reduction][dot][stability]") {
+    cpptensor::initialize_kernels();
+
+    constexpr size_t repeats = 4096;
+    std::vector<float> values;
+    values.reserve(repeats * 3);
+    for (size_t i = 0; i < repeats; ++i) {
+        values.push_back(100000000.0f);
+        values.push_back(1.0f);
+        values.push_back(-100000000.0f);
+    }
+
+    const float expected_sum = static_cast<float>(repeats);
+    const float expected_mean = expected_sum / static_cast<float>(values.size());
+
+    cpptensor::Tensor tensor({values.size()}, values);
+
+    const float naive_sum = naive_sum_f32(values);
+    const float naive_sum_error = std::fabs(naive_sum - expected_sum);
+
+    run_cpu_dispatch_paths([&]() {
+        require_data(tensor.sum(), {expected_sum});
+        require_data(tensor.mean(), {expected_mean});
+
+        const float stable_sum = tensor.sum().data()[0];
+        const float stable_sum_error = std::fabs(stable_sum - expected_sum);
+        REQUIRE(stable_sum_error <= naive_sum_error + 1e-3f);
+    });
+
+    std::vector<float> ones(values.size(), 1.0f);
+    cpptensor::Tensor ones_tensor({ones.size()}, ones);
+
+    const float naive_dot = naive_dot_f32(values, ones);
+    const float naive_dot_error = std::fabs(naive_dot - expected_sum);
+
+    run_cpu_dispatch_paths([&]() {
+        const auto stable_dot = cpptensor::dot(tensor, ones_tensor);
+        require_data(stable_dot, {expected_sum});
+        const float stable_dot_error = std::fabs(stable_dot.data()[0] - expected_sum);
+        REQUIRE(stable_dot_error <= naive_dot_error + 1e-3f);
+    });
+}
+
+TEST_CASE("stable accumulation preserves non-finite IEEE semantics for sum mean and dot",
+          "[reduction][dot][stability][ieee]") {
+    cpptensor::initialize_kernels();
+
+    const float positive_infinity = std::numeric_limits<float>::infinity();
+    cpptensor::Tensor input({2}, {positive_infinity, 1.0f});
+    cpptensor::Tensor ones({2}, {1.0f, 1.0f});
+
+    auto assert_non_finite_semantics = [&]() {
+        require_ieee_data(input.sum(), {positive_infinity});
+        require_ieee_data(input.mean(), {positive_infinity});
+        require_ieee_data(cpptensor::dot(input, ones), {positive_infinity});
+    };
+
+    run_cpu_dispatch_paths(assert_non_finite_semantics);
+
+#ifdef BUILD_AVX512
+    if (cpptensor::has_avx512f()) {
+        ScopedCpuIsaOverride force_avx512("avx512");
+        assert_non_finite_semantics();
+    }
+#endif
 }
 
 TEST_CASE("non-contiguous view regressions match contiguous baselines",

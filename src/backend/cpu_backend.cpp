@@ -10,8 +10,20 @@
 
 namespace {
     inline void compensated_add(double value, double& sum, double& compensation) {
+        if (!std::isfinite(value) || !std::isfinite(sum) || !std::isfinite(compensation)) {
+            sum += value;
+            compensation = 0.0;
+            return;
+        }
+
         // Neumaier summation improves stability when magnitudes differ sharply.
         const double t = sum + value;
+        if (!std::isfinite(t)) {
+            sum = t;
+            compensation = 0.0;
+            return;
+        }
+
         if (std::abs(sum) >= std::abs(value)) {
             compensation += (sum - t) + value;
         } else {
