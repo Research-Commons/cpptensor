@@ -1,4 +1,7 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
 
 /**
  * @file dispatcherEnum.h
@@ -59,6 +62,45 @@ enum class DeviceType {
 };
 
 /**
+ * @enum DType
+ * @brief Tensor element datatype descriptor
+ */
+enum class DType : std::uint8_t {
+    BOOL,     ///< bool / mask tensor
+    INT32,    ///< signed 32-bit integer
+    FLOAT32,  ///< IEEE-754 single precision float
+    FLOAT64   ///< IEEE-754 double precision float
+};
+
+inline const char* dtype_name(DType dtype) {
+    switch (dtype) {
+        case DType::BOOL:
+            return "bool";
+        case DType::INT32:
+            return "int32";
+        case DType::FLOAT32:
+            return "float32";
+        case DType::FLOAT64:
+            return "float64";
+    }
+    return "unknown";
+}
+
+inline std::size_t dtype_size_bytes(DType dtype) {
+    switch (dtype) {
+        case DType::BOOL:
+            return sizeof(std::uint8_t);
+        case DType::INT32:
+            return sizeof(std::int32_t);
+        case DType::FLOAT32:
+            return sizeof(float);
+        case DType::FLOAT64:
+            return sizeof(double);
+    }
+    throw std::runtime_error("Unsupported dtype");
+}
+
+/**
  * @enum OpType
  * @brief Enumeration of all supported tensor operations
  *
@@ -117,12 +159,12 @@ enum class OpType {
     Min,      ///< Reduction min: B = min(A, dim, keepdim)
 
     // =============== Comparison Operations ===============
-    Eq,       ///< Element-wise equality: C = (A == B), returns 1.0f/0.0f
-    Ne,       ///< Element-wise inequality: C = (A != B), returns 1.0f/0.0f
-    Gt,       ///< Element-wise greater than: C = (A > B), returns 1.0f/0.0f
-    Lt,       ///< Element-wise less than: C = (A < B), returns 1.0f/0.0f
-    Ge,       ///< Element-wise greater/equal: C = (A >= B), returns 1.0f/0.0f
-    Le,       ///< Element-wise less/equal: C = (A <= B), returns 1.0f/0.0f
+    Eq,       ///< Element-wise equality: C = (A == B), returns bool tensor
+    Ne,       ///< Element-wise inequality: C = (A != B), returns bool tensor
+    Gt,       ///< Element-wise greater than: C = (A > B), returns bool tensor
+    Lt,       ///< Element-wise less than: C = (A < B), returns bool tensor
+    Ge,       ///< Element-wise greater/equal: C = (A >= B), returns bool tensor
+    Le,       ///< Element-wise less/equal: C = (A <= B), returns bool tensor
 
     // =============== Linear Algebra ===============
     Matmul,   ///< Matrix multiplication: C = A @ B

@@ -11,3 +11,8 @@ Public tensor ops lazily initialize the kernel registry on first use, so a fresh
 process can call `A + B`, `sum()`, `matmul()`, and other registered ops without
 calling `initialize_kernels()` manually. `initialize_kernels()` remains available
 as an optional explicit warm-up step.
+
+# dtype support
+`Tensor` now tracks element dtype metadata (`bool`, `int32`, `float32`, `float64`).
+Comparison operators produce `bool` tensors, and dtype is preserved across views,
+clone/contiguous, and factory creation (`zeros`, `ones`, `full`, `randn`).

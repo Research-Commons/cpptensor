@@ -7,9 +7,12 @@
 #include <sstream>
 #include <optional>
 #include <cstdint>
+#include <type_traits>
+#include <initializer_list>
 
 #include "cpptensor/tensor/tensorimpl.hpp"
 #include "cpptensor/enums/dispatcherEnum.h"   // for DeviceType
+#include "cpptensor/tensor/dtype_utils.hpp"
 
 namespace cpptensor {
 
@@ -69,6 +72,21 @@ class Tensor {
         Tensor(const std::vector<size_t>& shape,
                const std::vector<float>& values,
                DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               std::initializer_list<float> values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               std::initializer_list<int> values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<double>& values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<std::int32_t>& values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<bool>& values,
+               DeviceType device = DeviceType::CPU);
 
         /**
          * @brief Default constructor - creates an uninitialized tensor handle
@@ -119,7 +137,8 @@ class Tensor {
          * ```
          */
         static Tensor zeros(const std::vector<size_t>& shape,
-                            DeviceType device = DeviceType::CPU);
+                            DeviceType device = DeviceType::CPU,
+                            DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor filled with ones
@@ -134,7 +153,8 @@ class Tensor {
          * ```
          */
         static Tensor ones(const std::vector<size_t>& shape,
-                           DeviceType device = DeviceType::CPU);
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor with random normal distribution (mean=0, std=1)
@@ -152,7 +172,8 @@ class Tensor {
          * ```
          */
         static Tensor randn(const std::vector<size_t>& shape,
-                            DeviceType device = DeviceType::CPU);
+                            DeviceType device = DeviceType::CPU,
+                            DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor filled with a constant value
@@ -169,7 +190,20 @@ class Tensor {
          */
         static Tensor full(const std::vector<size_t>& shape,
                            float value,
-                           DeviceType device = DeviceType::CPU);
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT32);
+        static Tensor full(const std::vector<size_t>& shape,
+                           double value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT64);
+        static Tensor full(const std::vector<size_t>& shape,
+                           std::int32_t value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::INT32);
+        static Tensor full(const std::vector<size_t>& shape,
+                           bool value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::BOOL);
 
         /**
          * @brief Create zero-copy view from raw pointer (advanced use)
@@ -205,7 +239,8 @@ class Tensor {
         static Tensor from_ptr(const std::vector<size_t>& shape,
                               float* data_ptr,
                               std::shared_ptr<TensorImpl> owner,
-                              DeviceType device = DeviceType::CPU);
+                              DeviceType device = DeviceType::CPU,
+                              DType dtype = DType::FLOAT32);
 
         // =============== Shape and Metadata ===============
 
@@ -255,6 +290,7 @@ class Tensor {
          * @return DeviceType enum (CPU, CUDA, etc.)
          */
         DeviceType device_type() const;
+        DType dtype() const;
 
         /**
          * @brief Print tensor data in compact format
@@ -548,6 +584,7 @@ class Tensor {
          * @return Independent copy of the tensor
          */
         Tensor clone() const;
+        Tensor astype(DType target_dtype) const;
 
         // =============== Reduction Operations ===============
 
@@ -804,11 +841,11 @@ class Tensor {
          * @brief Element-wise equality comparison: C = (A == B)
          *
          * Performs element-wise equality comparison with broadcasting support.
-         * Returns a tensor with 1.0f where elements are equal, 0.0f otherwise.
+         * Returns a bool tensor where each element is true when inputs are equal, false otherwise.
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator==(const Tensor& A, const Tensor& B);
         friend Tensor operator==(const Tensor& A, float scalar);
@@ -819,7 +856,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator!=(const Tensor& A, const Tensor& B);
         friend Tensor operator!=(const Tensor& A, float scalar);
@@ -830,7 +867,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator>(const Tensor& A, const Tensor& B);
         friend Tensor operator>(const Tensor& A, float scalar);
@@ -841,7 +878,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator<(const Tensor& A, const Tensor& B);
         friend Tensor operator<(const Tensor& A, float scalar);
@@ -852,7 +889,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator>=(const Tensor& A, const Tensor& B);
         friend Tensor operator>=(const Tensor& A, float scalar);
@@ -863,7 +900,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator<=(const Tensor& A, const Tensor& B);
         friend Tensor operator<=(const Tensor& A, float scalar);
@@ -892,7 +929,20 @@ class Tensor {
          */
         Tensor(const std::vector<size_t>& shape,
                float value,
-               DeviceType device = DeviceType::CPU);
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::FLOAT32);
+        Tensor(const std::vector<size_t>& shape,
+               double value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::FLOAT64);
+        Tensor(const std::vector<size_t>& shape,
+               std::int32_t value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::INT32);
+        Tensor(const std::vector<size_t>& shape,
+               bool value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::BOOL);
 
         /**
          * @brief Protected constructor from TensorImpl pointer
