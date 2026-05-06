@@ -97,3 +97,10 @@ ubsan.log
 .venv/
 env/
 venv/
+
+# Python tooling artifacts
+__pycache__/
+*.pyc
+
+# Benchmark harness outputs
+benchmark_results/

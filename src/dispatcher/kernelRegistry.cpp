@@ -21,6 +21,7 @@ namespace cpptensor {
                 case OpType::Mul: return "Mul";
                 case OpType::Sub: return "Sub";
                 case OpType::Div: return "Div";
+                case OpType::Neg: return "Neg";
                 case OpType::Pow: return "Pow";
                 case OpType::Exp: return "Exp";
                 case OpType::Log: return "Log";

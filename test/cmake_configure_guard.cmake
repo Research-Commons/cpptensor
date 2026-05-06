@@ -27,6 +27,10 @@ if(DEFINED FORCE_BUILD_AVX512 AND FORCE_BUILD_AVX512)
     list(APPEND configure_cmd -DBUILD_AVX512=ON)
 endif()
 
+if(DEFINED CONFIGURE_OPTIONS AND NOT CONFIGURE_OPTIONS STREQUAL "")
+    list(APPEND configure_cmd ${CONFIGURE_OPTIONS})
+endif()
+
 execute_process(
     COMMAND ${configure_cmd}
     RESULT_VARIABLE configure_result

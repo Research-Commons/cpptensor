@@ -1,6 +1,7 @@
 #include "cpptensor/ops/reduction/sum.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 
 namespace cpptensor {
@@ -48,6 +49,29 @@ namespace cpptensor {
         KernelRegistry::instance()
             .getReductionKernel(OpType::Sum, A.device_type())
             (input, out, actual_dim, keepdim);
+
+        const bool requires_grad = A.requires_grad();
+        out.set_requires_grad(requires_grad);
+        if (!requires_grad) {
+            return out;
+        }
+
+        const auto out_shape_copy = out.shape();
+        const auto in_shape_copy = in_shape;
+        const auto input_impl = A.impl();
+        const std::optional<int> backward_dim = (actual_dim == -1)
+                                                ? std::nullopt
+                                                : std::optional<int>(actual_dim);
+
+        out.impl()->set_grad_fn([input_impl, out_shape_copy, in_shape_copy, backward_dim, keepdim]
+                                (const std::vector<float>& grad_out) {
+            input_impl->backward(
+                autograd::expand_reduction_grad(grad_out,
+                                                out_shape_copy,
+                                                in_shape_copy,
+                                                backward_dim,
+                                                keepdim));
+        });
 
         return out;
     }

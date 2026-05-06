@@ -1,4 +1,5 @@
 #include "cpptensor/ops/linearAlgebra/eig.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <algorithm>
 #include <string>
 #include <stdexcept>
@@ -31,6 +32,7 @@ std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
 } // namespace
 
 EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
+    autograd::throw_if_requires_grad(A, "eig_symmetric");
     // ===== Step 1: Validate Input =====
     if (A.device_type() != DeviceType::CPU) {
         throw std::runtime_error("eig_symmetric: only CPU tensors supported");
@@ -100,6 +102,7 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
 }
 
 EigResult eig(const Tensor& A, bool compute_eigenvectors) {
+    autograd::throw_if_requires_grad(A, "eig");
     // ===== Step 1: Validate Input =====
     if (A.device_type() != DeviceType::CPU) {
         throw std::runtime_error("eig: only CPU tensors supported");
