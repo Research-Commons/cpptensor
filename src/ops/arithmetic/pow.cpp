@@ -2,10 +2,12 @@
 #include "dispatcher/kernelRegistry.h"
 #include "tensor/tensor.hpp"
 #include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 namespace cpptensor {
 
     Tensor pow(const Tensor& base, const Tensor& exponent) {
+        autograd::throw_if_requires_grad(base, exponent, "pow");
         if (base.shape() != exponent.shape())
             throw std::runtime_error("Shape mismatch in pow");
 

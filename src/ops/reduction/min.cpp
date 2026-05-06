@@ -2,12 +2,14 @@
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
 #include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 #include <stdexcept>
 
 namespace cpptensor {
 
     Tensor min(const Tensor& input, int dim, bool keepdim) {
+        autograd::throw_if_requires_grad(input, "min");
         // Validate dimension
         if (dim >= static_cast<int>(input.ndim())) {
             throw std::invalid_argument(

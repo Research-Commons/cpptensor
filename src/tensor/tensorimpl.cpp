@@ -31,7 +31,10 @@ namespace cpptensor {
           data_ptr_(nullptr),
           stride_(),
           offset_(0),
-          grad_fn_(nullptr),
+          grad_fn_(),
+          grad_data_(),
+          requires_grad_(false),
+          has_called_backward_(false),
           shape_(shape),
           device_(device)
     {
@@ -52,7 +55,10 @@ namespace cpptensor {
           data_ptr_(nullptr),
           stride_(),
           offset_(0),
-          grad_fn_(nullptr),
+          grad_fn_(),
+          grad_data_(),
+          requires_grad_(false),
+          has_called_backward_(false),
           shape_(shape),
           device_(device)
     {
@@ -72,7 +78,10 @@ namespace cpptensor {
           data_ptr_(nullptr),
           stride_(),
           offset_(offset),
-          grad_fn_(nullptr),
+          grad_fn_(),
+          grad_data_(),
+          requires_grad_(false),
+          has_called_backward_(false),
           shape_(new_shape),
           device_(base_impl_->device_)
     {
@@ -94,7 +103,10 @@ namespace cpptensor {
           data_ptr_(data_ptr),
           stride_(),
           offset_(0),
-          grad_fn_(nullptr),
+          grad_fn_(),
+          grad_data_(),
+          requires_grad_(false),
+          has_called_backward_(false),
           shape_(shape),
           device_(device)
     {
@@ -226,15 +238,71 @@ namespace cpptensor {
     void TensorImpl::set_device(DeviceType dev) { device_ = dev; }
 
     bool TensorImpl::has_called_backward() const {
-        // TODO: Implement autograd backward tracking
-        // For now, always return false as autograd is not fully implemented
-        return false;
+        return has_called_backward_;
     }
 
     void TensorImpl::set_has_called_backward(bool val) {
-        // TODO: Implement autograd backward tracking
-        // Placeholder for future autograd implementation
-        (void)val;  // Suppress unused parameter warning
+        has_called_backward_ = val;
+    }
+
+    bool TensorImpl::requires_grad() const {
+        return requires_grad_;
+    }
+
+    void TensorImpl::set_requires_grad(bool val) {
+        requires_grad_ = val;
+    }
+
+    void TensorImpl::zero_grad() {
+        grad_data_.assign(numel(), 0.0f);
+    }
+
+    const std::vector<float>& TensorImpl::grad_data() const {
+        return grad_data_;
+    }
+
+    void TensorImpl::accumulate_grad(const std::vector<float>& grad) {
+        if (grad.size() != numel()) {
+            throw std::runtime_error("autograd: gradient shape mismatch while accumulating gradient");
+        }
+
+        if (grad_data_.empty()) {
+            grad_data_ = grad;
+            return;
+        }
+
+        if (grad_data_.size() != grad.size()) {
+            throw std::runtime_error("autograd: internal gradient buffer size mismatch");
+        }
+
+        for (size_t i = 0; i < grad.size(); ++i) {
+            grad_data_[i] += grad[i];
+        }
+    }
+
+    void TensorImpl::backward(const std::vector<float>& grad) {
+        if (!requires_grad_) {
+            return;
+        }
+
+        has_called_backward_ = true;
+        accumulate_grad(grad);
+
+        if (grad_fn_) {
+            grad_fn_(grad);
+        }
+    }
+
+    void TensorImpl::set_grad_fn(std::function<void(const std::vector<float>&)> fn) {
+        grad_fn_ = std::move(fn);
+    }
+
+    void TensorImpl::clear_grad_fn() {
+        grad_fn_ = {};
+    }
+
+    bool TensorImpl::has_grad_fn() const {
+        return static_cast<bool>(grad_fn_);
     }
 
     std::vector<size_t> TensorImpl::compute_strides(const std::vector<size_t>& shape){

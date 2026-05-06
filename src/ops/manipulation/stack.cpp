@@ -1,5 +1,6 @@
 #include "cpptensor/ops/manipulation/stack.hpp"
 #include "cpptensor/ops/manipulation/cat.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 
 namespace cpptensor {
@@ -48,6 +49,7 @@ namespace cpptensor {
         // 4. Validate all tensors have the same shape
         for (size_t i = 0; i < tensors.size(); ++i) {
             const auto& t = tensors[i];
+            autograd::throw_if_requires_grad(t, "stack");
             auto t_shape = t.shape();
 
             if (t.device_type() != common_device) {

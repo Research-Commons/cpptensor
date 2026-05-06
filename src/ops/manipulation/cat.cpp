@@ -1,4 +1,5 @@
 #include "cpptensor/ops/manipulation/cat.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 #include <cstring>
 
@@ -131,6 +132,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
 
     for (size_t i = 0; i < tensors.size(); ++i) {
         const auto& t = tensors[i];
+        autograd::throw_if_requires_grad(t, "cat");
         auto t_shape = t.shape();
 
         if (t.device_type() != common_device) {
