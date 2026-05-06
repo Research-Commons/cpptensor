@@ -101,18 +101,10 @@ namespace cpptensor {
         for (size_t d : out_sh) total *= d;
         if (total == 0) return;
 
-        // Allocate device buffers
-        float *d_a = nullptr, *d_b = nullptr, *d_out = nullptr;
+        const float* d_a = A.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_b = B.impl()->backend_data_ptr(DeviceType::CUDA);
+        float* d_out = out.impl()->backend_data_ptr(DeviceType::CUDA);
         size_t *d_strideA_eff = nullptr, *d_strideB_eff = nullptr, *d_strideOut = nullptr, *d_out_sh = nullptr;
-
-        // Note: A.data() and B.data() hold compact storage for their shapes (C-contiguous).
-        // We copy raw flattened arrays. The index calculation using stride_eff will map correctly.
-        CUDA_CHECK(cudaMalloc(&d_a, A.data().size() * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_b, B.data().size() * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_out, total * sizeof(float)));
-
-        CUDA_CHECK(cudaMemcpy(d_a, A.data().data(), A.data().size() * sizeof(float), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_b, B.data().data(), B.data().size() * sizeof(float), cudaMemcpyHostToDevice));
 
         // copy stride arrays and output shape/strides
         CUDA_CHECK(cudaMalloc(&d_strideA_eff, n * sizeof(size_t)));
@@ -133,13 +125,7 @@ namespace cpptensor {
         CUDA_CHECK(cudaGetLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // Copy result back
-        CUDA_CHECK(cudaMemcpy(out.data().data(), d_out, total * sizeof(float), cudaMemcpyDeviceToHost));
-
         // Free device memory
-        CUDA_CHECK(cudaFree(d_a));
-        CUDA_CHECK(cudaFree(d_b));
-        CUDA_CHECK(cudaFree(d_out));
         CUDA_CHECK(cudaFree(d_strideA_eff));
         CUDA_CHECK(cudaFree(d_strideB_eff));
         CUDA_CHECK(cudaFree(d_strideOut));
@@ -184,18 +170,10 @@ namespace cpptensor {
         for (size_t d : out_sh) total *= d;
         if (total == 0) return;
 
-        // Allocate device buffers
-        float *d_a = nullptr, *d_b = nullptr, *d_out = nullptr;
+        const float* d_a = A.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_b = B.impl()->backend_data_ptr(DeviceType::CUDA);
+        float* d_out = out.impl()->backend_data_ptr(DeviceType::CUDA);
         size_t *d_strideA_eff = nullptr, *d_strideB_eff = nullptr, *d_strideOut = nullptr, *d_out_sh = nullptr;
-
-        // Note: A.data() and B.data() hold compact storage for their shapes (C-contiguous).
-        // We copy raw flattened arrays. The index calculation using stride_eff will map correctly.
-        CUDA_CHECK(cudaMalloc(&d_a, A.data().size() * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_b, B.data().size() * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_out, total * sizeof(float)));
-
-        CUDA_CHECK(cudaMemcpy(d_a, A.data().data(), A.data().size() * sizeof(float), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_b, B.data().data(), B.data().size() * sizeof(float), cudaMemcpyHostToDevice));
 
         // copy stride arrays and output shape/strides
         CUDA_CHECK(cudaMalloc(&d_strideA_eff, n * sizeof(size_t)));
@@ -216,16 +194,10 @@ namespace cpptensor {
         CUDA_CHECK(cudaGetLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
 
-        // Copy result back
-        CUDA_CHECK(cudaMemcpy(out.data().data(), d_out, total * sizeof(float), cudaMemcpyDeviceToHost));
-
         // Free device memory
-        CUDA_CHECK(cudaFree(d_a));
-        CUDA_CHECK(cudaFree(d_b));
-        CUDA_CHECK(cudaFree(d_out));
         CUDA_CHECK(cudaFree(d_strideA_eff));
         CUDA_CHECK(cudaFree(d_strideB_eff));
         CUDA_CHECK(cudaFree(d_strideOut));
         CUDA_CHECK(cudaFree(d_out_sh));
     }
-} // namespace cppgrad
+} // namespace cpptensor

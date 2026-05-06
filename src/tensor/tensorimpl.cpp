@@ -1,7 +1,12 @@
 #include "cpptensor/tensor/tensorimpl.hpp"
+
 #include <numeric>
 #include <stdexcept>
 #include <utility>
+
+#ifdef BUILD_CUDA
+#include <cuda_runtime.h>
+#endif
 
 namespace cpptensor {
 
@@ -20,6 +25,20 @@ namespace cpptensor {
                 expected_stride *= shape[static_cast<size_t>(i)];
             }
             return true;
+        }
+
+#ifdef BUILD_CUDA
+        inline void cuda_check(cudaError_t status, const char* what) {
+            if (status != cudaSuccess) {
+                throw std::runtime_error(
+                    std::string("CUDA failure during ") + what + ": " + cudaGetErrorString(status));
+            }
+        }
+#endif
+
+        [[noreturn]] void throw_cuda_not_built() {
+            throw std::runtime_error(
+                "CUDA transfer requested, but cpptensor was built without BUILD_CUDA support");
         }
     } // namespace
 
@@ -41,9 +60,14 @@ namespace cpptensor {
             throw std::runtime_error("TensorImpl: data size does not match shape");
         }
         stride_ = compute_strides(shape_);
+
+        if (device_ == DeviceType::CUDA) {
+#ifdef BUILD_CUDA
+            ensure_resident(DeviceType::CUDA);
+#endif
+        }
     }
 
-    //protected const
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            float fill_value,
                            DeviceType device)
@@ -60,9 +84,14 @@ namespace cpptensor {
         for (auto s : shape_) total *= s;
         data_.assign(total, fill_value);
         stride_ = compute_strides(shape_);
+
+        if (device_ == DeviceType::CUDA) {
+#ifdef BUILD_CUDA
+            ensure_resident(DeviceType::CUDA);
+#endif
+        }
     }
 
-    // View constructor - shares data with base
     TensorImpl::TensorImpl(std::shared_ptr<TensorImpl> base,
                            const std::vector<size_t>& new_shape,
                            const std::vector<size_t>& new_stride,
@@ -81,10 +110,8 @@ namespace cpptensor {
         } else {
             stride_ = new_stride;
         }
-        // data_ is empty - we delegate to base
     }
 
-    // Pointer-based view constructor - wraps raw pointer
     TensorImpl::TensorImpl(const std::vector<size_t>& shape,
                            float* data_ptr,
                            std::shared_ptr<TensorImpl> owner,
@@ -99,7 +126,10 @@ namespace cpptensor {
           device_(device)
     {
         stride_ = compute_strides(shape);
-        // data_ is empty - we use data_ptr_ instead
+    }
+
+    TensorImpl::~TensorImpl() {
+        release_cuda_storage();
     }
 
     bool TensorImpl::can_expose_direct_data_buffer() const {
@@ -164,6 +194,7 @@ namespace cpptensor {
             if (base_impl_) {
                 return base_impl_->data();
             }
+            ensure_resident(DeviceType::CPU);
             return data_;
         }
 
@@ -176,12 +207,69 @@ namespace cpptensor {
             if (base_impl_) {
                 return base_impl_->data();
             }
+            ensure_resident(DeviceType::CPU);
+            host_data_valid_ = true;
+            cuda_data_valid_ = false;
             return data_;
         }
 
         throw std::runtime_error(
             "Tensor::data(): mutable access is unavailable for sliced, permuted, "
             "transposed, or pointer-backed views. Call contiguous() or clone() first.");
+    }
+
+    void TensorImpl::ensure_resident(DeviceType dev) const {
+        if (data_ptr_ != nullptr) {
+            throw std::runtime_error(
+                "TensorImpl::ensure_resident: pointer-backed views do not support explicit device transfer");
+        }
+
+        if (base_impl_) {
+            base_impl_->ensure_resident(dev);
+            return;
+        }
+
+        const size_t total = numel();
+        const size_t bytes = total * sizeof(float);
+
+        if (dev == DeviceType::CPU) {
+            if (host_data_valid_) {
+                return;
+            }
+
+            data_.resize(total);
+
+#ifdef BUILD_CUDA
+            if (total != 0) {
+                cuda_check(cudaMemcpy(data_.data(), cuda_data_, bytes, cudaMemcpyDeviceToHost),
+                           "device-to-host copy");
+            }
+#else
+            throw_cuda_not_built();
+#endif
+
+            host_data_valid_ = true;
+            return;
+        }
+
+#ifdef BUILD_CUDA
+        if (cuda_data_valid_) {
+            return;
+        }
+
+        if (total != 0 && cuda_data_ == nullptr) {
+            cuda_check(cudaMalloc(&cuda_data_, bytes), "device allocation");
+        }
+
+        if (host_data_valid_ && total != 0) {
+            cuda_check(cudaMemcpy(cuda_data_, data_.data(), bytes, cudaMemcpyHostToDevice),
+                       "host-to-device copy");
+        }
+
+        cuda_data_valid_ = true;
+#else
+        throw_cuda_not_built();
+#endif
     }
 
     const float* TensorImpl::data_ptr() const {
@@ -193,7 +281,8 @@ namespace cpptensor {
         if (base_impl_) {
             return base_impl_->data_ptr() + offset_;
         }
-        // Own data: return pointer to vector
+
+        ensure_resident(DeviceType::CPU);
         return data_.data() + offset_;
     }
 
@@ -206,8 +295,70 @@ namespace cpptensor {
         if (base_impl_) {
             return base_impl_->data_ptr() + offset_;
         }
-        // Own data: return pointer to vector
+
+        ensure_resident(DeviceType::CPU);
+        host_data_valid_ = true;
+        cuda_data_valid_ = false;
         return data_.data() + offset_;
+    }
+
+    const float* TensorImpl::backend_data_ptr(DeviceType dev) const {
+        if (dev == DeviceType::CPU) {
+            return data_ptr();
+        }
+
+        if (data_ptr_) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): pointer-backed views do not expose CUDA storage");
+        }
+
+        if (base_impl_) {
+            return base_impl_->backend_data_ptr(dev) + offset_;
+        }
+
+        ensure_resident(DeviceType::CUDA);
+        return cuda_data_ + offset_;
+    }
+
+    float* TensorImpl::backend_data_ptr(DeviceType dev) {
+        if (dev == DeviceType::CPU) {
+            return data_ptr();
+        }
+
+        if (data_ptr_) {
+            throw std::runtime_error(
+                "TensorImpl::backend_data_ptr(CUDA): pointer-backed views do not expose CUDA storage");
+        }
+
+        if (base_impl_) {
+            return base_impl_->backend_data_ptr(dev) + offset_;
+        }
+
+        ensure_resident(DeviceType::CUDA);
+        host_data_valid_ = false;
+        cuda_data_valid_ = true;
+        return cuda_data_ + offset_;
+    }
+
+    std::shared_ptr<TensorImpl> TensorImpl::copy_to(DeviceType dev) const {
+        std::vector<float> logical;
+        materialize_logical_data(logical);
+
+        auto copied = std::make_shared<TensorImpl>(shape_, logical, DeviceType::CPU);
+        copied->set_device(dev);
+        return copied;
+    }
+
+    void TensorImpl::release_cuda_storage() const {
+#ifdef BUILD_CUDA
+        if (cuda_data_ != nullptr) {
+            cudaFree(cuda_data_);
+            cuda_data_ = nullptr;
+        }
+#else
+        cuda_data_ = nullptr;
+#endif
+        cuda_data_valid_ = false;
     }
 
     std::vector<size_t>& TensorImpl::stride(){ return stride_; }
@@ -223,7 +374,13 @@ namespace cpptensor {
     }
 
     DeviceType TensorImpl::device() const { return device_; }
-    void TensorImpl::set_device(DeviceType dev) { device_ = dev; }
+    void TensorImpl::set_device(DeviceType dev) {
+        if (device_ == dev) {
+            return;
+        }
+        ensure_resident(dev);
+        device_ = dev;
+    }
 
     bool TensorImpl::has_called_backward() const {
         // TODO: Implement autograd backward tracking

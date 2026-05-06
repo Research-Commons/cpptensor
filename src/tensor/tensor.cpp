@@ -133,6 +133,15 @@ namespace cpptensor {
         return static_cast<const TensorImpl&>(*impl).device();
     }
 
+    Tensor Tensor::to(DeviceType device) const {
+        const auto impl = require_impl(__func__);
+        return Tensor(impl->copy_to(device));
+    }
+
+    Tensor Tensor::copy_to(DeviceType device) const {
+        return to(device);
+    }
+
 
     void Tensor::print() const {
         const auto impl = require_impl(__func__);

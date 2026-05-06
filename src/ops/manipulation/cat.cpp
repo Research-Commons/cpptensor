@@ -1,21 +1,11 @@
 #include "cpptensor/ops/manipulation/cat.hpp"
+#include "cpptensor/ops/helperOps.hpp"
 #include <stdexcept>
 #include <cstring>
 
 namespace cpptensor {
 
 namespace {
-    const char* deviceTypeName(DeviceType device) {
-        switch (device) {
-            case DeviceType::CPU:
-                return "CPU";
-            case DeviceType::CUDA:
-                return "CUDA";
-            default:
-                return "Unknown";
-        }
-    }
-
     // Helper function to copy a slice from src tensor to dst tensor at given
     // offset along concat_dim.
     void copySlice(Tensor& dst, const Tensor& src, int concat_dim, size_t offset_in_concat_dim) {
@@ -160,6 +150,10 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
         }
 
         total_concat_size += t_shape[concat_dim];
+    }
+
+    if (common_device == DeviceType::CUDA) {
+        throw_cuda_unsupported("cat");
     }
 
     // 5. Compute output shape

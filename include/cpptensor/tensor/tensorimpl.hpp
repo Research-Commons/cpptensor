@@ -133,6 +133,8 @@ namespace cpptensor {
                    std::shared_ptr<TensorImpl> owner,
                    DeviceType device = DeviceType::CPU);
 
+        ~TensorImpl();
+
         // =============== Data Accessors ===============
 
         /**
@@ -179,6 +181,16 @@ namespace cpptensor {
          * @return Mutable pointer to data
          */
         float* data_ptr();
+
+        /**
+         * @brief Get pointer for a specific backend and ensure residency
+         */
+        const float* backend_data_ptr(DeviceType dev) const;
+
+        /**
+         * @brief Get mutable pointer for a specific backend and mark it dirty
+         */
+        float* backend_data_ptr(DeviceType dev);
 
         /**
          * @brief Get const reference to stride information
@@ -283,15 +295,22 @@ namespace cpptensor {
         /**
          * @brief Set device for tensor storage
          *
-         * Changes the device type. Note: This does NOT actually move data.
-         * It only updates the metadata flag. Actual data transfer must be
-         * handled separately.
+         * Changes the preferred device and performs the required data transfer
+         * for owning tensors.
          *
          * @param dev New device type
-         *
-         * @warning Does not perform actual data migration. Use with caution.
          */
         void set_device(DeviceType dev);
+
+        /**
+         * @brief Copy tensor storage to another device and return a new impl
+         */
+        std::shared_ptr<TensorImpl> copy_to(DeviceType dev) const;
+
+        /**
+         * @brief Ensure the current storage is resident on the target device
+         */
+        void ensure_resident(DeviceType dev) const;
 
     private:
         /**
@@ -307,7 +326,7 @@ namespace cpptensor {
         /**
          * @brief Raw data buffer in row-major order
          */
-        std::vector<float> data_;
+        mutable std::vector<float> data_;
 
         /**
          * @brief Cached compact logical contents for const data() on views
@@ -367,6 +386,21 @@ namespace cpptensor {
         DeviceType device_ = DeviceType::CPU;
 
         /**
+         * @brief CUDA device storage for owning contiguous tensors
+         */
+        mutable float* cuda_data_ = nullptr;
+
+        /**
+         * @brief Whether host storage contains up-to-date logical contents
+         */
+        mutable bool host_data_valid_ = true;
+
+        /**
+         * @brief Whether CUDA storage contains up-to-date logical contents
+         */
+        mutable bool cuda_data_valid_ = false;
+
+        /**
          * @brief Compute strides from shape (row-major layout)
          *
          * Calculates stride values for efficient multi-dimensional indexing.
@@ -382,6 +416,11 @@ namespace cpptensor {
          * ```
          */
         std::vector<size_t> compute_strides(const std::vector<size_t>& shape);
+
+        /**
+         * @brief Free CUDA storage owned by this impl
+         */
+        void release_cuda_storage() const;
     };
 
 } // namespace cpptensor

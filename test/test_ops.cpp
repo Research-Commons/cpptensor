@@ -347,23 +347,12 @@ TEST_CASE("cat concatenates tensors along existing dimensions", "[manipulation][
     require_data(neg_dim, dim1.data());
 }
 
-TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
+TEST_CASE("cat rejects CUDA tensors and mixed-device inputs",
           "[manipulation][cat][device]") {
     cpptensor::Tensor cuda_a({2}, {1, 2}, DeviceType::CUDA);
     cpptensor::Tensor cuda_b({2}, {3, 4}, DeviceType::CUDA);
-
-    auto cuda_result = cpptensor::cat({cuda_a, cuda_b}, 0);
-    require_shape(cuda_result, {4});
-    require_data(cuda_result, {1, 2, 3, 4});
-    REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
-
-    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
-    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
-
-    auto negative_dim_result = cpptensor::cat({cuda_matrix_a, cuda_matrix_b}, -1);
-    require_shape(negative_dim_result, {2, 4});
-    require_data(negative_dim_result, {1, 2, 5, 6, 3, 4, 7, 8});
-    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
+    REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cuda_b}, 0),
+                        Catch::Matchers::ContainsSubstring("no CUDA kernel is registered"));
 
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
@@ -516,23 +505,12 @@ TEST_CASE("stack preserves logical data from tensor views", "[manipulation][stac
     }
 }
 
-TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
+TEST_CASE("stack rejects CUDA tensors and mixed-device inputs",
           "[manipulation][stack][device]") {
     cpptensor::Tensor cuda_a({2}, {1, 2}, DeviceType::CUDA);
     cpptensor::Tensor cuda_b({2}, {3, 4}, DeviceType::CUDA);
-
-    auto cuda_result = cpptensor::stack({cuda_a, cuda_b}, 0);
-    require_shape(cuda_result, {2, 2});
-    require_data(cuda_result, {1, 2, 3, 4});
-    REQUIRE(cuda_result.device_type() == DeviceType::CUDA);
-
-    cpptensor::Tensor cuda_matrix_a({2, 2}, {1, 2, 3, 4}, DeviceType::CUDA);
-    cpptensor::Tensor cuda_matrix_b({2, 2}, {5, 6, 7, 8}, DeviceType::CUDA);
-
-    auto negative_dim_result = cpptensor::stack({cuda_matrix_a, cuda_matrix_b}, -1);
-    require_shape(negative_dim_result, {2, 2, 2});
-    require_data(negative_dim_result, {1, 5, 2, 6, 3, 7, 4, 8});
-    REQUIRE(negative_dim_result.device_type() == DeviceType::CUDA);
+    REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cuda_b}, 0),
+                        Catch::Matchers::ContainsSubstring("no CUDA kernel is registered"));
 
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),

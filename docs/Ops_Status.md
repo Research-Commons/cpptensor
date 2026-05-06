@@ -72,6 +72,8 @@ On CPU, `div`, `log`, `sqrt`, and `pow` follow the corresponding real-valued `st
 
 CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log`, `sqrt`, or `pow`. Attempting those ops on `DeviceType::CUDA` tensors fails with the dispatcher’s missing-kernel error instead of silently using different semantics.
 
+Device transfer is explicit via `tensor.to(DeviceType::CPU/CUDA)` and `tensor.copy_to(...)`. CPU-only ops (for example `matmul`, `dot`, `cat`, `stack`) now reject CUDA tensors with an explicit error that tells callers to transfer to CPU first.
+
 ### 4. Activation Functions
 
 | Operation | Function | Description | Status |

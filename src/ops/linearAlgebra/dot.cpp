@@ -1,6 +1,7 @@
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
+#include "cpptensor/ops/helperOps.hpp"
 #include <stdexcept>
 
 #ifdef USE_OPENBLAS
@@ -12,6 +13,9 @@ namespace cpptensor {
     Tensor dot(const Tensor& A, const Tensor& B) {
         if (A.device_type() != B.device_type()) {
             throw std::runtime_error("dot: device mismatch");
+        }
+        if (A.device_type() == DeviceType::CUDA) {
+            throw_cuda_unsupported("dot");
         }
 
         const auto& Ash = A.shape();
