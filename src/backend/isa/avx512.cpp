@@ -162,12 +162,14 @@ namespace cpptensor{
     //optimised version of gemm i found online (1.5x-2x better)
 
     void AVX512::gemm_f32_avx512(const Tensor &A, const Tensor &B, Tensor &Out) {
-        const int64_t M = A.shape()[0];
-        const int64_t K = A.shape()[1];
-        const int64_t KB = B.shape()[0];
-        const int64_t N = B.shape()[1];
+        const int64_t M = static_cast<int64_t>(A.shape()[0]);
+        const int64_t K = static_cast<int64_t>(A.shape()[1]);
+        const int64_t KB = static_cast<int64_t>(B.shape()[0]);
+        const int64_t N = static_cast<int64_t>(B.shape()[1]);
 
-        if (K != KB || Out.shape()[0] != M || Out.shape()[1] != N) {
+        if (K != KB ||
+            static_cast<int64_t>(Out.shape()[0]) != M ||
+            static_cast<int64_t>(Out.shape()[1]) != N) {
             throw std::runtime_error("AVX512 GEMM: shape mismatch (A: MxK, B: KxN, C: MxN)");
         }
 
@@ -395,6 +397,7 @@ namespace cpptensor{
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX512::sum_f32_avx512(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();
@@ -527,7 +530,7 @@ namespace cpptensor{
                         // Manual gather (AVX-512 has _mm512_i32gather_ps but requires index vector)
                         alignas(64) float temp[16];
                         for (int j = 0; j < 16; ++j) {
-                            temp[j] = in_data[(o * reduce + r + j) * inner + i];
+                            temp[j] = in_data[(o * reduce + r + static_cast<size_t>(j)) * inner + i];
                         }
                         __m512 vals = _mm512_load_ps(temp);
                         sum_vec = _mm512_add_ps(sum_vec, vals);
@@ -734,6 +737,7 @@ namespace cpptensor{
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX512::max_f32_avx512(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();
@@ -903,6 +907,7 @@ namespace cpptensor{
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX512::min_f32_avx512(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();

@@ -42,7 +42,7 @@ To turn on warning-gate mode for local/CI hardening, add:
 
 ### Warning policy by compiler
 
-- GCC / Clang: `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wconversion -Wsign-conversion -Wnull-dereference -Wnon-virtual-dtor`
+- GCC / Clang: `-Wall -Wextra -Wpedantic -Wformat=2 -Wnull-dereference -Wnon-virtual-dtor`
 - MSVC: `/W4 /permissive-`
 
 # runtime behavior

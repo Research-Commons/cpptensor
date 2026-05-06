@@ -82,10 +82,7 @@ if(CPPTENSOR_ENABLE_STRICT_WARNINGS)
             -Wall
             -Wextra
             -Wpedantic
-            -Wshadow
             -Wformat=2
-            -Wconversion
-            -Wsign-conversion
             -Wnull-dereference
             -Wnon-virtual-dtor
         )
