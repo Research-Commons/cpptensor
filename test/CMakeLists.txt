@@ -7,6 +7,7 @@ add_executable(cpptensor_test ${TEST_SOURCES})
 
 # Link with main cpptensor lib and Catch2
 target_link_libraries(cpptensor_test PRIVATE cpptensor Catch2::Catch2WithMain)
+cpptensor_apply_build_safety_flags(cpptensor_test)
 
 # Enable test discovery via CTest and Catch2
 include(CTest)
@@ -15,6 +16,7 @@ catch_discover_tests(cpptensor_test)
 
 add_executable(cpptensor_lazy_init_smoke lazy_init_smoke.cpp)
 target_link_libraries(cpptensor_lazy_init_smoke PRIVATE cpptensor)
+cpptensor_apply_build_safety_flags(cpptensor_lazy_init_smoke)
 add_test(NAME cpptensor_lazy_init_smoke COMMAND cpptensor_lazy_init_smoke)
 
 if(CMAKE_GENERATOR)
@@ -53,4 +55,33 @@ if(CMAKE_GENERATOR)
             -DBUILD_CONFIG=$<CONFIG>
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_package_consumer_smoke.cmake
     )
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_test(
+            NAME cmake_configure_enables_asan_ubsan_flags
+            COMMAND ${CMAKE_COMMAND}
+                -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-sanitizers
+                -DGENERATOR=${CMAKE_GENERATOR}
+                -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+                -DPROCESSOR=${CMAKE_SYSTEM_PROCESSOR}
+                -DCONFIGURE_OPTIONS=-DCPPTENSOR_ENABLE_ASAN=ON\;-DCPPTENSOR_ENABLE_UBSAN=ON
+                -DREQUIRED_PATTERNS=Sanitizers\ enabled:\ address,\ undefined
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+        )
+
+        add_test(
+            NAME cmake_rejects_asan_tsan_combination
+            COMMAND ${CMAKE_COMMAND}
+                -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-conflicting-sanitizers
+                -DGENERATOR=${CMAKE_GENERATOR}
+                -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+                -DPROCESSOR=${CMAKE_SYSTEM_PROCESSOR}
+                -DEXPECT_FAILURE=ON
+                -DCONFIGURE_OPTIONS=-DCPPTENSOR_ENABLE_ASAN=ON\;-DCPPTENSOR_ENABLE_TSAN=ON
+                -DREQUIRED_PATTERNS=CPPTENSOR_ENABLE_ASAN\ and\ CPPTENSOR_ENABLE_TSAN\ cannot\ both\ be\ ON
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+        )
+    endif()
 endif()

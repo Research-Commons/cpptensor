@@ -458,7 +458,6 @@ namespace cpptensor {
 
     //-----------SIN----------------
     inline __m256 sin256_ps(__m256 x) {
-        const __m256 pi     = _mm256_set1_ps(3.14159265358979323846f);
         const __m256 inv_pi2 = _mm256_set1_ps(1.0f / (2.0f * 3.14159265358979323846f));
         const __m256 two_pi = _mm256_set1_ps(2.0f * 3.14159265358979323846f);
 
@@ -715,7 +714,6 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
     // Zero C tile-by-tile when storing, so no need to pre-clear C
 
     for (int i0 = 0; i0 < M; i0 += TM) {
-        const int iMax = std::min(M, i0 + TM);
         for (int j0 = 0; j0 < N; j0 += TN) {
             const int nRemain = N - j0;
             const int n0 = std::min(8, std::max(0, nRemain));
@@ -737,14 +735,14 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
                         b0 = _mm256_loadu_ps(&Bdata[k * N + j0]);
                     } else {
                         alignas(32) float btmp0[8] = {0};
-                        if (n0 > 0) std::memcpy(btmp0, &Bdata[k * N + j0], sizeof(float) * n0);
+                        if (n0 > 0) std::memcpy(btmp0, &Bdata[k * N + j0], sizeof(float) * static_cast<size_t>(n0));
                         b0 = _mm256_loadu_ps(btmp0);
                     }
                     if (n1 == 8) {
                         b1 = _mm256_loadu_ps(&Bdata[k * N + j0 + 8]);
                     } else if (n1 > 0) {
                         alignas(32) float btmp1[8] = {0};
-                        std::memcpy(btmp1, &Bdata[k * N + j0 + 8], sizeof(float) * n1);
+                        std::memcpy(btmp1, &Bdata[k * N + j0 + 8], sizeof(float) * static_cast<size_t>(n1));
                         b1 = _mm256_loadu_ps(btmp1);
                     } else {
                         b1 = _mm256_setzero_ps();
@@ -768,7 +766,7 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
                 } else if (n0 > 0) {
                     alignas(32) float ctmp0[8];
                     _mm256_storeu_ps(ctmp0, acc[ii][0]);
-                    std::memcpy(Crow, ctmp0, sizeof(float) * n0);
+                    std::memcpy(Crow, ctmp0, sizeof(float) * static_cast<size_t>(n0));
                 }
 
                 if (n1 == 8) {
@@ -776,7 +774,7 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
                 } else if (n1 > 0) {
                     alignas(32) float ctmp1[8];
                     _mm256_storeu_ps(ctmp1, acc[ii][1]);
-                    std::memcpy(Crow + 8, ctmp1, sizeof(float) * n1);
+                    std::memcpy(Crow + 8, ctmp1, sizeof(float) * static_cast<size_t>(n1));
                 }
             }
         }
@@ -898,6 +896,7 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX2::sum_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();
@@ -1174,6 +1173,7 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX2::max_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();
@@ -1338,6 +1338,7 @@ void AVX2::gemm_f32_avx2(const Tensor& A, const Tensor& B, Tensor& C) {
      * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
      */
     void AVX2::min_f32_avx2(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+        (void)keepdim;
         const auto& in_shape = input.shape();
         const size_t ndim = in_shape.size();
         const float* in_data = input.data().data();

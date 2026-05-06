@@ -1,20 +1,19 @@
 #include "cpptensor/ops/comparison/ne.hpp"
 
-#include "cpptensor/backend/cpu_backend.h"
-#include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/ops/comparison/comparison_common.hpp"
 
 namespace cpptensor {
 
 Tensor ne(const Tensor& a, const Tensor& b) {
-    return dispatchBinaryOp(a, b, OpType::Ne, CPU::neKernel);
+    return compare_tensors(a, b, std::not_equal_to<float>{});
 }
 
 Tensor ne(const Tensor& a, float scalar) {
-    return ne(a, Tensor::full(a.shape(), scalar, a.device_type()));
+    return ne(a, Tensor::full(a.shape(), scalar, a.device_type(), a.dtype()));
 }
 
 Tensor ne(float scalar, const Tensor& b) {
-    return ne(Tensor::full(b.shape(), scalar, b.device_type()), b);
+    return ne(Tensor::full(b.shape(), scalar, b.device_type(), b.dtype()), b);
 }
 
 Tensor operator!=(const Tensor& a, const Tensor& b) {

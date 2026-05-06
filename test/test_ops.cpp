@@ -1192,7 +1192,9 @@ TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[
     }
 
     cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
-    cpptensor::Tensor exponents({9}, {2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
+    cpptensor::Tensor exponents(
+        {9},
+        std::vector<float>{2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
     cpptensor::Tensor out = cpptensor::Tensor::full({9}, 0.0f);
 
     cpptensor::AVX2::pow_f32_avx2(base, exponents, out);
