@@ -1,61 +1,82 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
+set -euo pipefail
 
-# ==========================================================
-#  cppgrad – full CPU / AVX2 / AVX512 / CUDA benchmark suite
-# ==========================================================
+# Structured benchmark runner for cpptensor.
+#
+# Optional env vars:
+#   BUILD_DIR                (default: cmake-build-release)
+#   OUTPUT_DIR               (default: benchmark_results)
+#   BENCH_BACKENDS           (default: cpu,avx2,avx512,cuda)
+#   BENCHMARK_FILTER         (default: unset)
+#   BENCHMARK_MIN_TIME       (default: unset)
+#   BASELINE_JSON            (default: unset; enables regression check)
+#   MAX_REGRESSION_PCT       (default: 5.0)
+#   THRESHOLDS_FILE          (default: unset)
+#   FAIL_ON_MISSING_BINARY   (default: 0)
+#   FAIL_ON_MISSING_ROWS     (default: 0)
 
-echo "📊 Running cppgrad benchmark suite..."
-echo "------------------------------------"
-
-# 1️⃣ Ensure CPU runs at fixed performance frequency
-if command -v cpupower &> /dev/null; then
-    echo "⚙️  Setting CPU governor to 'performance'..."
-    sudo cpupower frequency-set -g performance > /dev/null
+if [[ "${BASH_SOURCE[0]}" == */* ]]; then
+  ROOT_DIR="$(cd -- "${BASH_SOURCE[0]%/*}" >/dev/null 2>&1 && pwd)"
 else
-    echo "⚠️  'cpupower' not found — skipping frequency fix."
+  ROOT_DIR="$PWD"
+fi
+BUILD_DIR="${BUILD_DIR:-cmake-build-release}"
+OUTPUT_DIR="${OUTPUT_DIR:-benchmark_results}"
+BENCH_BACKENDS="${BENCH_BACKENDS:-cpu,avx2,avx512,cuda}"
+MAX_REGRESSION_PCT="${MAX_REGRESSION_PCT:-5.0}"
+
+HARNESS_SCRIPT="${ROOT_DIR}/benchmarks/benchmark_harness.py"
+COMPARE_SCRIPT="${ROOT_DIR}/benchmarks/compare_benchmark_results.py"
+
+HARNESS_CMD=(
+  "${HARNESS_SCRIPT}"
+  --build-dir "${BUILD_DIR}"
+  --output-dir "${OUTPUT_DIR}"
+  --backends "${BENCH_BACKENDS}"
+)
+
+if [[ -n "${BENCHMARK_FILTER:-}" ]]; then
+  HARNESS_CMD+=(--benchmark-filter "${BENCHMARK_FILTER}")
 fi
 
-# 2️⃣ Disable ASLR for reproducibility
-echo "🧠 Disabling ASLR temporarily..."
-sudo bash -c 'echo 0 > /proc/sys/kernel/randomize_va_space'
-
-# 3️⃣ Move to benchmark directory
-cd "$(dirname "$0")/cmake-build-release/benchmarks" || {
-    echo "❌ Cannot find build/benchmarks directory."
-    exit 1
-}
-
-# 4️⃣ Run all benchmarks one by one and log results
-run_bench() {
-    local name="$1"
-    local binary="./$2"
-    local log="${name}.log"
-
-    if [ -f "$binary" ]; then
-        echo ""
-        echo "🚀 Running ${name}..."
-        echo "------------------------------------"
-        "$binary" | tee "$log"
-    else
-        echo "⚠️  Skipping ${name}: binary not found ($binary)"
-    fi
-}
-
-run_bench "CPU"      "cppgrad_bench_cpu"
-run_bench "AVX2"     "cppgrad_bench_avx2"
-run_bench "AVX512"   "cppgrad_bench_avx512"
-run_bench "CUDA"     "cppgrad_bench_cuda"
-
-# 5️⃣ Restore system settings
-echo ""
-echo "🧩 Restoring ASLR and CPU governor..."
-sudo bash -c 'echo 2 > /proc/sys/kernel/randomize_va_space'
-if command -v cpupower &> /dev/null; then
-    sudo cpupower frequency-set -g schedutil > /dev/null
+if [[ -n "${BENCHMARK_MIN_TIME:-}" ]]; then
+  HARNESS_CMD+=(--benchmark-min-time "${BENCHMARK_MIN_TIME}")
 fi
 
-echo ""
-echo "✅ All benchmarks complete."
-echo "📂 Logs saved as: cpu.log, avx2.log, avx512.log, cuda.log"
+if [[ "${FAIL_ON_MISSING_BINARY:-0}" == "1" ]]; then
+  HARNESS_CMD+=(--fail-on-missing-binary)
+fi
 
+for extra_arg in "$@"; do
+  HARNESS_CMD+=(--extra-benchmark-arg "${extra_arg}")
+done
+
+echo "[cpptensor-bench] Collecting structured benchmark results..."
+python3 "${HARNESS_CMD[@]}"
+
+LATEST_JSON="${OUTPUT_DIR}/latest.json"
+echo "[cpptensor-bench] Latest consolidated JSON: ${LATEST_JSON}"
+
+if [[ -n "${BASELINE_JSON:-}" ]]; then
+  echo "[cpptensor-bench] Comparing against baseline: ${BASELINE_JSON}"
+  COMPARE_CMD=(
+    "${COMPARE_SCRIPT}"
+    --baseline "${BASELINE_JSON}"
+    --candidate "${LATEST_JSON}"
+    --max-regression-pct "${MAX_REGRESSION_PCT}"
+    --output-json "${OUTPUT_DIR}/latest.regression-report.json"
+  )
+
+  if [[ -n "${THRESHOLDS_FILE:-}" ]]; then
+    COMPARE_CMD+=(--thresholds "${THRESHOLDS_FILE}")
+  fi
+
+  if [[ "${FAIL_ON_MISSING_ROWS:-0}" == "1" ]]; then
+    COMPARE_CMD+=(--fail-on-missing)
+  fi
+
+  python3 "${COMPARE_CMD[@]}"
+  echo "[cpptensor-bench] Regression report: ${OUTPUT_DIR}/latest.regression-report.json"
+fi
+
+echo "[cpptensor-bench] Done."
