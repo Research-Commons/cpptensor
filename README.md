@@ -1,12 +1,83 @@
 # cpptensor
-Tensor library written in c++ 26
 
-https://deepwiki.com/Research-Commons/cpptensor/10.3-license
+`cpptensor` is a C++ tensor library focused on CPU performance (generic + AVX2/AVX-512), with optional OpenBLAS acceleration and early CUDA support.
 
-# build
-Remember to clone the submodules - `` git clone --recurse-submodules <cpptensor> ``
+## What you get
+
+- N-dimensional `Tensor` with views + contiguous materialization.
+- Arithmetic, unary math, reductions, comparisons, reshape/transpose/concat/stack.
+- Linear algebra ops including `matmul`, `dot`, `tensordot`, `svd`, and `eig`.
+- Runtime CPU ISA dispatch with build-time AVX2/AVX-512 specializations.
+- Lazy kernel registry initialization on first tensor op.
+- Catch2 test suite + Google Benchmark targets.
+- Tensor checkpoint save/load (`Tensor::save`, `Tensor::load`).
+
+## Platform and toolchain support
+
+| Area | Status |
+|---|---|
+| Linux x86_64 | **Supported / primary path** (validated workflow). |
+| Linux aarch64 | **Supported for generic CPU path**; AVX2/AVX-512 auto-disable. |
+| macOS | CPU builds expected; CUDA is forced `OFF`. |
+| Windows | Not part of the documented conda workflow (experimental). |
+
+### Required build tools
+
+- CMake (minimum 3.20).
+- A C++ compiler with **C++26** support.
+- Ninja or Make.
+- Git (for submodules).
+
+## Quickstart (fresh clone)
+
+> All build/test commands below use the dedicated `cpptensor` conda environment.
+
+```bash
+git clone --recurse-submodules https://github.com/Research-Commons/cpptensor.git
+cd cpptensor
+```
+
+### 1) Create or update the conda environment
+
+```bash
+# First-time setup:
+conda env create -f environment.yml
+
+# Existing environment:
+conda env update -n cpptensor -f environment.yml --prune
+```
+
+### 2) Configure (tests/examples/benchmarks enabled)
+
+```bash
+conda run -n cpptensor cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCPPTENSOR_BUILD_TESTS=ON \
+  -DCPPTENSOR_BUILD_EXAMPLES=ON \
+  -DCPPTENSOR_BUILD_BENCHMARKS=ON
+```
+
+### 3) Build
+
+```bash
+conda run -n cpptensor cmake --build build -j
+```
+
+### 4) Run tests
+
+```bash
+conda run -n cpptensor ctest --test-dir build --output-on-failure
+```
+
+### 5) Run a smoke test and benchmark
+
+```bash
+conda run -n cpptensor ./build/test/cpptensor_lazy_init_smoke
+conda run -n cpptensor ./build/benchmarks/cpptensor_bench_cpu --benchmark_min_time=0.01s
+```
 
 ## CMake build targets
+
 Tests, examples, and benchmarks are opt-in:
 
 - `CPPTENSOR_BUILD_TESTS` (default: `OFF`)
@@ -16,67 +87,37 @@ Tests, examples, and benchmarks are opt-in:
 Minimal library-only configure:
 
 ```bash
-cmake -S . -B build
+conda run -n cpptensor cmake -S . -B build
 ```
 
-Development configure with all extras:
+## Build profiles and developer toggles
 
-```bash
-cmake -S . -B build-dev \
-  -DCPPTENSOR_BUILD_TESTS=ON \
-  -DCPPTENSOR_BUILD_EXAMPLES=ON \
-  -DCPPTENSOR_BUILD_BENCHMARKS=ON
-```
-
-## CMake build profiles
-- `Debug`: target-scoped `-O0 -g3` (or MSVC `/Od /Zi /RTC1`).
-- `Release`: target-scoped `-O3 -DNDEBUG` (or MSVC `/O2 /DNDEBUG`).
-- `RelWithDebInfo`: target-scoped `-O2 -g -DNDEBUG` (or MSVC `/O2 /Zi /DNDEBUG`).
-- Single-config generators default to `RelWithDebInfo` when `CMAKE_BUILD_TYPE` is omitted.
-
-Optional toggles:
-- `-DCPPTENSOR_ENABLE_PROFILING=ON`: preserve frame pointers for profiling.
-- `-DCPPTENSOR_ENABLE_LTO=ON`: enable IPO/LTO for `Release` and `RelWithDebInfo` when supported.
-- `-DCPPTENSOR_ENABLE_GPERFTOOLS=ON`: link examples with `libprofiler` when available.
-
-## install + downstream CMake usage
-Install cpptensor to a prefix:
-
-```bash
-cmake -S . -B build
-cmake --build build
-cmake --install build --prefix /tmp/cpptensor-install
-```
-
-Consume from another CMake project:
-
-```cmake
-find_package(cpptensor CONFIG REQUIRED)
-target_link_libraries(your_target PRIVATE cpptensor::cpptensor)
-```
+- Build profiles: `Debug`, `Release`, `RelWithDebInfo`.
+- Single-config generators default to `RelWithDebInfo` if `CMAKE_BUILD_TYPE` is omitted.
+- `CPPTENSOR_ENABLE_PROFILING=ON`: profiling-friendly frame-pointer settings.
+- `CPPTENSOR_ENABLE_LTO=ON`: interprocedural optimization (LTO) for `Release`/`RelWithDebInfo` when supported.
+- `CPPTENSOR_ENABLE_GPERFTOOLS=ON`: link example binaries with `libprofiler` when available.
 
 ## Build safety modes (warnings + sanitizers)
 
-cpptensor now provides opt-in CMake toggles for stricter development/CI builds:
-
-- `CPPTENSOR_ENABLE_STRICT_WARNINGS=ON`: enable an elevated warning profile on cpptensor-owned targets only.
-- `CPPTENSOR_WARNINGS_AS_ERRORS=ON`: promote enabled warnings to errors (`-Werror` / `/WX`).
-- `CPPTENSOR_ENABLE_ASAN=ON`: AddressSanitizer
-- `CPPTENSOR_ENABLE_UBSAN=ON`: UndefinedBehaviorSanitizer
-- `CPPTENSOR_ENABLE_TSAN=ON`: ThreadSanitizer
+- `CPPTENSOR_ENABLE_STRICT_WARNINGS=ON`: stricter warning profile on cpptensor-owned targets.
+- `CPPTENSOR_WARNINGS_AS_ERRORS=ON`: promote warnings to errors.
+- `CPPTENSOR_ENABLE_ASAN=ON`: AddressSanitizer.
+- `CPPTENSOR_ENABLE_UBSAN=ON`: UndefinedBehaviorSanitizer.
+- `CPPTENSOR_ENABLE_TSAN=ON`: ThreadSanitizer.
 
 Notes:
+
 - Sanitizers currently support GCC/Clang-style toolchains.
-- `CPPTENSOR_ENABLE_ASAN` and `CPPTENSOR_ENABLE_TSAN` are mutually exclusive in a single build.
+- `CPPTENSOR_ENABLE_ASAN` and `CPPTENSOR_ENABLE_TSAN` are mutually exclusive.
 - Sanitizer mode currently requires `BUILD_CUDA=OFF`.
 
-### Documented sanitizer workflow
-
-Run this from a shell with Conda available:
+Example sanitizer workflow:
 
 ```bash
-conda run -n cpptensor cmake -S . -B build-sanitize \
+conda run -n cpptensor cmake -S . -B build-sanitize -G Ninja \
   -DCMAKE_BUILD_TYPE=Debug \
+  -DCPPTENSOR_BUILD_TESTS=ON \
   -DBUILD_CUDA=OFF \
   -DUSE_OPENBLAS=OFF \
   -DCPPTENSOR_ENABLE_ASAN=ON \
@@ -86,38 +127,89 @@ conda run -n cpptensor cmake --build build-sanitize -j
 conda run -n cpptensor ctest --test-dir build-sanitize --output-on-failure
 ```
 
-To turn on warning-gate mode for local/CI hardening, add:
-`-DCPPTENSOR_ENABLE_STRICT_WARNINGS=ON -DCPPTENSOR_WARNINGS_AS_ERRORS=ON`
+## Backend feature flags
 
-### Warning policy by compiler
+Configure with `conda run -n cpptensor cmake ... -D<OPTION>=<VALUE>`.
 
-- GCC / Clang: `-Wall -Wextra -Wpedantic -Wformat=2 -Wnull-dereference -Wnon-virtual-dtor`
-- MSVC: `/W4 /permissive-`
+- `USE_OPENBLAS` (default: `ON`)
+  - If OpenBLAS is found, `matmul`/`dot` can use BLAS-backed paths.
+  - `svd`/`eig` require OpenBLAS/LAPACK support.
+- `BUILD_AVX2` / `BUILD_AVX512` (auto-detected defaults)
+  - Enabled only when target + compiler support are detected.
+  - Forcing `ON` when unsupported fails at configure time.
+- `BUILD_CUDA` (default: `OFF`)
+  - Requires CUDA toolkit discoverable by CMake.
+  - On Apple platforms this is automatically forced `OFF`.
+- `USE_STD_SIMD`
+  - Declared in CMake, but not currently wired as an active backend toggle.
 
-# runtime behavior
+## Install + downstream CMake usage
+
+Install cpptensor to a prefix:
+
+```bash
+conda run -n cpptensor cmake -S . -B build
+conda run -n cpptensor cmake --build build
+conda run -n cpptensor cmake --install build --prefix /tmp/cpptensor-install
+```
+
+Consume from another CMake project:
+
+```cmake
+find_package(cpptensor CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE cpptensor::cpptensor)
+```
+
+## Minimal usage example
+
+```cpp
+#include "cpptensor/tensor/tensor.hpp"
+#include "cpptensor/ops/arithmetic/add.hpp"
+
+int main() {
+    using namespace cpptensor;
+
+    Tensor a = Tensor::full({2, 2}, 1.0f);
+    Tensor b = Tensor::full({2, 2}, 2.0f);
+    Tensor c = a + b;
+    c.print();
+}
+```
+
+## Runtime behavior
+
 Public tensor ops lazily initialize the kernel registry on first use, so a fresh
 process can call `A + B`, `sum()`, `matmul()`, and other registered ops without
 calling `initialize_kernels()` manually. `initialize_kernels()` remains available
 as an optional explicit warm-up step.
 
-# numerical stability policy
+## Numerical stability policy
+
 `sum()`, `mean()`, and `dot()` prioritize accumulation accuracy over raw
 throughput on cancellation-heavy inputs:
 
-- CPU reductions use widened compensated accumulation before casting back to
-  `float`.
-- AVX runtime dispatch still uses optimized paths for pointwise and matmul-style
-  kernels, but `sum`/`mean` route through the stable reduction implementation.
-- `dot()` kernels accumulate products in widened precision before casting the
-  scalar result back to `float`.
+- CPU reductions use widened compensated accumulation before casting back to `float`.
+- AVX runtime dispatch still uses optimized paths for pointwise/matmul-style kernels,
+  but `sum`/`mean` route through the stable reduction implementation.
+- `dot()` kernels accumulate products in widened precision before casting the scalar
+  result back to `float`.
 
-This trades some peak reduction throughput for better numerical robustness.
+## Dtype support
 
-# dtype support
-`Tensor` now tracks element dtype metadata (`bool`, `int32`, `float32`, `float64`).
+`Tensor` tracks element dtype metadata (`bool`, `int32`, `float32`, `float64`).
 Comparison operators produce `bool` tensors, and dtype is preserved across views,
 clone/contiguous, and factory creation (`zeros`, `ones`, `full`, `randn`).
 
-# checkpoint I/O
+## Checkpoint I/O
+
 Tensor checkpoints are supported via `Tensor::save(path)` and `Tensor::load(path)`.
 See `docs/TensorSerialization.md` for the versioned binary format and view behavior.
+
+## More docs
+
+- [Operator status and semantics](docs/Ops_Status.md)
+- [Tensor serialization format](docs/TensorSerialization.md)
+- [Tensor view behavior](docs/TensorViews.md)
+- [How to add new ops/kernels](docs/HowToAddNewOpsWithKernel.md)
+- [Linear algebra decomposition notes](docs/LinearAlgebraDecompositionNotes.md)
+- [Performance notes and benchmark write-up](docs/PerformanceComparisonOps.md)
