@@ -2,6 +2,7 @@
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/backend/isa/avx2.hpp"
+#include "cpptensor/backend/isa/isaDetect.hpp"
 #include "cpptensor/ops/math/abs.hpp"
 #include "cpptensor/ops/activation/relu.hpp"
 #include "cpptensor/ops/activation/sigmoid.hpp"
@@ -17,6 +18,8 @@
 #include "cpptensor/ops/math/sqrt.hpp"
 #include "cpptensor/ops/math/tan.hpp"
 
+#include <cstdlib>
+#include <iostream>
 
 using namespace cpptensor;
 
@@ -274,4 +277,30 @@ BENCHMARK(BM_Max_Dim_AVX2);
 BENCHMARK(BM_Min_AVX2);
 BENCHMARK(BM_Min_Dim_AVX2);
 
-BENCHMARK_MAIN();
+namespace {
+    constexpr int kBenchmarkSkipExitCode = 77;
+
+    void force_runtime_isa(const char* value) {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", value);
+#else
+        setenv("CPPGRAD_CPU_ISA", value, 1);
+#endif
+    }
+}
+
+int main(int argc, char** argv) {
+    if (!cpptensor::has_avx2()) {
+        std::cerr << "[cpptensor] skipping cpptensor_bench_avx2: host CPU/OS does not support AVX2+FMA runtime execution.\n";
+        return kBenchmarkSkipExitCode;
+    }
+
+    force_runtime_isa("avx2");
+    benchmark::Initialize(&argc, argv);
+    if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
+        return 1;
+    }
+    benchmark::RunSpecifiedBenchmarks();
+    benchmark::Shutdown();
+    return 0;
+}

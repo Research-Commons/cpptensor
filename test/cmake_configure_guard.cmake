@@ -23,6 +23,10 @@ if(DEFINED FORCE_BUILD_AVX2 AND FORCE_BUILD_AVX2)
     list(APPEND configure_cmd -DBUILD_AVX2=ON)
 endif()
 
+if(DEFINED FORCE_BUILD_AVX512 AND FORCE_BUILD_AVX512)
+    list(APPEND configure_cmd -DBUILD_AVX512=ON)
+endif()
+
 execute_process(
     COMMAND ${configure_cmd}
     RESULT_VARIABLE configure_result

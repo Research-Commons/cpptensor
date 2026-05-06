@@ -2,8 +2,12 @@
 #include "cpptensor/tensor/tensor.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/backend/isa/avx512.hpp"
+#include "cpptensor/backend/isa/isaDetect.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
+
+#include <cstdlib>
+#include <iostream>
 
 using namespace cpptensor;
 
@@ -132,4 +136,31 @@ BENCHMARK(BM_Max_AVX512);
 BENCHMARK(BM_Max_Dim_AVX512);
 BENCHMARK(BM_Min_AVX512);
 BENCHMARK(BM_Min_Dim_AVX512);
-BENCHMARK_MAIN();
+
+namespace {
+    constexpr int kBenchmarkSkipExitCode = 77;
+
+    void force_runtime_isa(const char* value) {
+#ifdef _WIN32
+        _putenv_s("CPPGRAD_CPU_ISA", value);
+#else
+        setenv("CPPGRAD_CPU_ISA", value, 1);
+#endif
+    }
+}
+
+int main(int argc, char** argv) {
+    if (!cpptensor::has_avx512f()) {
+        std::cerr << "[cpptensor] skipping cpptensor_bench_avx512: host CPU/OS does not support required AVX-512 runtime execution.\n";
+        return kBenchmarkSkipExitCode;
+    }
+
+    force_runtime_isa("avx512");
+    benchmark::Initialize(&argc, argv);
+    if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
+        return 1;
+    }
+    benchmark::RunSpecifiedBenchmarks();
+    benchmark::Shutdown();
+    return 0;
+}

@@ -43,4 +43,18 @@ if(CMAKE_GENERATOR)
             -DREQUIRED_PATTERNS=BUILD_AVX2=ON\ requested,\ but\ AVX2\ kernels\ are\ unavailable
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
     )
+
+    add_test(
+        NAME cmake_rejects_forced_avx512_on_aarch64
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DBINARY_DIR=${CMAKE_BINARY_DIR}/cmake-configure-aarch64-avx512-on
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DCXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DPROCESSOR=aarch64
+            -DEXPECT_FAILURE=ON
+            -DFORCE_BUILD_AVX512=ON
+            -DREQUIRED_PATTERNS=BUILD_AVX512=ON\ requested,\ but\ AVX-512\ kernels\ are\ unavailable
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
+    )
 endif()
