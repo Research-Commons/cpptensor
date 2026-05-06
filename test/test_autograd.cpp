@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "gradient_check_utils.hpp"
 
@@ -446,5 +447,33 @@ TEST_CASE("Gradient check: matmul", "[autograd][gradcheck]") {
         // Broadcasting over batch dims introduces a reduction in dA (sum over expanded axis).
         require_gradient_check_passes("matmul batched broadcast grad", inputs, objective, analytic,
                                       GradientCheckTolerance{1.5e-3f, 4.0e-3f, 4.5e-2f});
+    }
+}
+
+TEST_CASE("Gradient-check utility guards", "[autograd][gradcheck]") {
+    SECTION("scalar_value enforces singleton tensors") {
+        const Tensor vector({2}, {1.0f, 2.0f});
+        REQUIRE_THROWS_WITH(scalar_value(vector), Catch::Matchers::ContainsSubstring("exactly one element"));
+    }
+
+    SECTION("non-finite numeric gradients fail checks") {
+        const std::vector<GradientInput> inputs{
+            {{1}, {-1.0f}},
+        };
+
+        const ScalarObjectiveFn objective = [](const std::vector<Tensor>& vars) {
+            return scalar_value(cpptensor::sqrt(vars[0]));
+        };
+
+        const AnalyticGradientFn analytic = [](const std::vector<Tensor>& vars) {
+            const auto& x = vars[0].data();
+            return std::vector<std::vector<float>>{
+                std::vector<float>{0.5f / std::sqrt(x[0])},
+            };
+        };
+
+        const GradientCheckReport report = check_gradients(inputs, objective, analytic);
+        REQUIRE_FALSE(report.passed());
+        REQUIRE(report.failed > 0);
     }
 }

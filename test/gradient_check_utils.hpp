@@ -224,16 +224,20 @@ inline GradientCheckReport check_gradients(const std::vector<GradientInput>& inp
             const float f_minus = objective(make_tensors(minus_inputs));
             const float numeric = (f_plus - f_minus) / (2.0f * tolerance.epsilon);
             const float analytic_value = analytic_grads[input_idx][elem_idx];
+            const bool finite_inputs = std::isfinite(f_plus) && std::isfinite(f_minus);
+            const bool finite_grads = std::isfinite(numeric) && std::isfinite(analytic_value);
 
             const float abs_error = std::fabs(numeric - analytic_value);
             const float scaled = std::max(std::fabs(analytic_value), std::fabs(numeric));
             const float threshold = tolerance.atol + tolerance.rtol * scaled;
+            const bool finite_error_terms = std::isfinite(abs_error) && std::isfinite(threshold);
 
             report.compared += 1;
             report.max_abs_error = std::max(report.max_abs_error, abs_error);
             report.max_tolerance = std::max(report.max_tolerance, threshold);
 
-            if (abs_error > threshold) {
+            const bool failed = !finite_inputs || !finite_grads || !finite_error_terms || (abs_error > threshold);
+            if (failed) {
                 report.failed += 1;
                 if (report.failures.size() < max_failures_to_store) {
                     report.failures.push_back(GradientFailure{
@@ -254,8 +258,8 @@ inline GradientCheckReport check_gradients(const std::vector<GradientInput>& inp
 
 inline float scalar_value(const Tensor& tensor) {
     const auto& data = tensor.data();
-    if (data.empty()) {
-        throw std::runtime_error("scalar_value: tensor has no elements");
+    if (data.size() != 1) {
+        throw std::runtime_error("scalar_value: expected tensor with exactly one element");
     }
     return data[0];
 }
