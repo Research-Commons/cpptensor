@@ -11,3 +11,7 @@ Public tensor ops lazily initialize the kernel registry on first use, so a fresh
 process can call `A + B`, `sum()`, `matmul()`, and other registered ops without
 calling `initialize_kernels()` manually. `initialize_kernels()` remains available
 as an optional explicit warm-up step.
+
+# checkpoint I/O
+Tensor checkpoints are supported via `Tensor::save(path)` and `Tensor::load(path)`.
+See `docs/TensorSerialization.md` for the versioned binary format and view behavior.

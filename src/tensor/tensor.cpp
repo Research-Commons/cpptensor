@@ -8,13 +8,111 @@
 #include <algorithm>
 #include <iomanip>
 #include <cmath>
+#include <bit>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <array>
+#include <fstream>
+#include <limits>
 
 namespace cpptensor {
 
     namespace {
+        constexpr std::array<char, 8> kTensorCheckpointMagic = {'C', 'P', 'T', 'E', 'N', 'S', 'R', '\0'};
+        constexpr uint16_t kTensorCheckpointVersion = 1;
+        constexpr uint8_t kTensorCheckpointDTypeF32 = 1;
+
+        [[noreturn]] void throw_checkpoint_error(const std::string& msg) {
+            throw std::runtime_error("tensor checkpoint I/O error: " + msg);
+        }
+
+        void ensure_stream_ok(const std::ios& stream, const std::string& context) {
+            if (!stream) {
+                throw_checkpoint_error(context);
+            }
+        }
+
+        void write_u8(std::ostream& out, uint8_t value) {
+            out.put(static_cast<char>(value));
+            ensure_stream_ok(out, "failed to write checkpoint byte");
+        }
+
+        void write_u16_le(std::ostream& out, uint16_t value) {
+            write_u8(out, static_cast<uint8_t>(value & 0xFFu));
+            write_u8(out, static_cast<uint8_t>((value >> 8u) & 0xFFu));
+        }
+
+        void write_u64_le(std::ostream& out, uint64_t value) {
+            for (int shift = 0; shift < 64; shift += 8) {
+                write_u8(out, static_cast<uint8_t>((value >> shift) & 0xFFu));
+            }
+        }
+
+        uint8_t read_u8(std::istream& in) {
+            const int value = in.get();
+            if (value == EOF) {
+                throw_checkpoint_error("unexpected end-of-file");
+            }
+            return static_cast<uint8_t>(value);
+        }
+
+        uint16_t read_u16_le(std::istream& in) {
+            uint16_t value = 0;
+            value |= static_cast<uint16_t>(read_u8(in));
+            value |= static_cast<uint16_t>(read_u8(in)) << 8u;
+            return value;
+        }
+
+        uint64_t read_u64_le(std::istream& in) {
+            uint64_t value = 0;
+            for (int shift = 0; shift < 64; shift += 8) {
+                value |= static_cast<uint64_t>(read_u8(in)) << shift;
+            }
+            return value;
+        }
+
+        void write_f32_le(std::ostream& out, float value) {
+            const uint32_t bits = std::bit_cast<uint32_t>(value);
+            for (int shift = 0; shift < 32; shift += 8) {
+                write_u8(out, static_cast<uint8_t>((bits >> shift) & 0xFFu));
+            }
+        }
+
+        float read_f32_le(std::istream& in) {
+            uint32_t bits = 0;
+            for (int shift = 0; shift < 32; shift += 8) {
+                bits |= static_cast<uint32_t>(read_u8(in)) << shift;
+            }
+            return std::bit_cast<float>(bits);
+        }
+
+        uint8_t encode_device_type(DeviceType device) {
+            switch (device) {
+                case DeviceType::CPU: return 0;
+                case DeviceType::CUDA: return 1;
+            }
+            throw_checkpoint_error("unsupported device enum value");
+        }
+
+        DeviceType decode_device_type(uint8_t value) {
+            switch (value) {
+                case 0: return DeviceType::CPU;
+                case 1: return DeviceType::CUDA;
+                default:
+                    throw_checkpoint_error("unsupported device code in checkpoint");
+            }
+        }
+
+        size_t checked_mul(size_t a, size_t b) {
+            if (a == 0 || b == 0) {
+                return 0;
+            }
+            if (a > std::numeric_limits<size_t>::max() / b) {
+                throw_checkpoint_error("shape metadata overflows size_t");
+            }
+            return a * b;
+        }
 
         std::vector<float> copy_logical_data(const Tensor& tensor) {
             const auto sh = tensor.shape();
@@ -536,6 +634,115 @@ namespace cpptensor {
     Tensor Tensor::clone() const {
         require_impl(__func__);
         return Tensor(shape(), copy_logical_data(*this), device_type());
+    }
+
+    void Tensor::save(const std::string& path) const {
+        require_impl(__func__);
+
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) {
+            throw_checkpoint_error("unable to open file for writing: " + path);
+        }
+
+        const auto tensor_shape = shape();
+        const auto tensor_data = copy_logical_data(*this);  // materializes views
+
+        out.write(kTensorCheckpointMagic.data(), static_cast<std::streamsize>(kTensorCheckpointMagic.size()));
+        ensure_stream_ok(out, "failed to write checkpoint magic");
+        write_u16_le(out, kTensorCheckpointVersion);
+        write_u16_le(out, 0);  // reserved flags for future compatibility
+        write_u8(out, kTensorCheckpointDTypeF32);
+        write_u8(out, encode_device_type(device_type()));
+        write_u16_le(out, 0);  // reserved padding
+
+        write_u64_le(out, static_cast<uint64_t>(tensor_shape.size()));
+        write_u64_le(out, static_cast<uint64_t>(tensor_data.size()));
+
+        for (size_t dim : tensor_shape) {
+            write_u64_le(out, static_cast<uint64_t>(dim));
+        }
+        for (float value : tensor_data) {
+            write_f32_le(out, value);
+        }
+
+        out.flush();
+        ensure_stream_ok(out, "failed while finalizing checkpoint write");
+    }
+
+    Tensor Tensor::load(const std::string& path) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in.is_open()) {
+            throw_checkpoint_error("unable to open file for reading: " + path);
+        }
+
+        std::array<char, kTensorCheckpointMagic.size()> magic{};
+        in.read(magic.data(), static_cast<std::streamsize>(magic.size()));
+        if (in.gcount() != static_cast<std::streamsize>(magic.size()) || magic != kTensorCheckpointMagic) {
+            throw_checkpoint_error("file is not a cpptensor checkpoint");
+        }
+
+        const uint16_t version = read_u16_le(in);
+        if (version != kTensorCheckpointVersion) {
+            throw_checkpoint_error("unsupported checkpoint version: " + std::to_string(version));
+        }
+
+        const uint16_t flags = read_u16_le(in);
+        if (flags != 0) {
+            throw_checkpoint_error("unsupported checkpoint flags for version 1");
+        }
+
+        const uint8_t dtype_code = read_u8(in);
+        if (dtype_code != kTensorCheckpointDTypeF32) {
+            throw_checkpoint_error("unsupported dtype code in checkpoint");
+        }
+
+        const DeviceType device = decode_device_type(read_u8(in));
+        (void)read_u16_le(in);  // reserved padding
+
+        const uint64_t ndim_u64 = read_u64_le(in);
+        const uint64_t numel_u64 = read_u64_le(in);
+
+        if (ndim_u64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+            throw_checkpoint_error("ndim metadata exceeds platform size limits");
+        }
+        if (numel_u64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+            throw_checkpoint_error("numel metadata exceeds platform size limits");
+        }
+
+        const size_t ndim = static_cast<size_t>(ndim_u64);
+        const size_t numel = static_cast<size_t>(numel_u64);
+
+        std::vector<size_t> loaded_shape;
+        loaded_shape.reserve(ndim);
+        size_t expected_numel = 1;
+        for (size_t i = 0; i < ndim; ++i) {
+            const uint64_t dim_u64 = read_u64_le(in);
+            if (dim_u64 > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+                throw_checkpoint_error("shape metadata exceeds platform size limits");
+            }
+            const size_t dim = static_cast<size_t>(dim_u64);
+            loaded_shape.push_back(dim);
+            expected_numel = checked_mul(expected_numel, dim);
+        }
+
+        if (loaded_shape.empty()) {
+            expected_numel = 1;  // scalar convention
+        }
+
+        if (expected_numel != numel) {
+            throw_checkpoint_error("shape/numel metadata mismatch");
+        }
+
+        std::vector<float> loaded_data(numel);
+        for (size_t i = 0; i < numel; ++i) {
+            loaded_data[i] = read_f32_le(in);
+        }
+
+        if (in.peek() != EOF) {
+            throw_checkpoint_error("unexpected trailing bytes in checkpoint");
+        }
+
+        return Tensor(loaded_shape, loaded_data, device);
     }
 
     // =============== Reduction Operations Implementation ===============
