@@ -6,6 +6,7 @@ This document explains the zero-copy view architecture implementation in cpptens
 
 - [Overview](#overview)
 - [Tuple-Style Indexing and Slicing](#tuple-style-indexing-and-slicing)
+- [cat/stack behavior with views and devices](#catstack-behavior-with-views-and-devices)
 - [Core Architecture Changes](#core-architecture-changes)
 - [The `base_impl_` Design](#the-base_impl_-design)
 - [Tensor Manipulation Functions](#tensor-manipulation-functions)
@@ -62,6 +63,24 @@ Tensor out = x.index({
 This keeps aliasing behavior predictable:
 - positive-step indexing/slicing aliases source storage,
 - negative-step indexing/slicing produces an independent compact tensor.
+
+---
+
+## cat/stack behavior with views and devices
+
+For tensor lists passed to `cat` and `stack`:
+
+- All operands must be on the same device (`CPU` or `CUDA` tags). Mixed-device lists fail fast with a clear error.
+- Output device is preserved from the validated common input device.
+- Non-contiguous inputs (e.g. slices/transposes/views) are supported:
+  - `cat` copies logical values using shape/stride traversal.
+  - `stack` first preserves logical contents for non-contiguous operands before concatenation.
+
+Regression coverage lives in `test/test_ops.cpp` under:
+- `[manipulation][cat][device]`
+- `[manipulation][stack][device]`
+- `[manipulation][cat][views]`
+- `[manipulation][stack][views]`
 
 ---
 
