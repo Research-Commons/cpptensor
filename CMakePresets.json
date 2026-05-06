@@ -1,0 +1,177 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 26,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "BUILD_CUDA": "OFF",
+        "USE_STD_SIMD": "OFF",
+        "USE_OPENBLAS": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CPPTENSOR_ENABLE_PROFILING": "OFF"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Developer (Debug)",
+      "description": "Default developer build with tests and examples.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CPPTENSOR_BUILD_TESTS": "ON",
+        "CPPTENSOR_BUILD_EXAMPLES": "ON"
+      }
+    },
+    {
+      "name": "test",
+      "displayName": "Test (RelWithDebInfo)",
+      "description": "Test-focused build used for local and CI test runs.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CPPTENSOR_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimized production build.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "sanitizer",
+      "displayName": "Sanitizer (ASan+UBSan)",
+      "description": "Debug build with address/undefined sanitizers.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "CPPTENSOR_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "benchmark",
+      "displayName": "Benchmark (RelWithDebInfo)",
+      "description": "Benchmark-friendly optimized build with symbols.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CPPTENSOR_BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI test preset",
+      "description": "CI-friendly configure profile reused by workflows.",
+      "inherits": "test"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "test",
+      "configurePreset": "test"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "sanitizer",
+      "configurePreset": "sanitizer"
+    },
+    {
+      "name": "benchmark",
+      "configurePreset": "benchmark",
+      "targets": [
+        "cpptensor_bench_cpu"
+      ]
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test",
+      "configurePreset": "test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "sanitizer",
+      "configurePreset": "sanitizer",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci",
+      "configurePreset": "ci",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "dev"
+        },
+        {
+          "type": "build",
+          "name": "dev"
+        },
+        {
+          "type": "test",
+          "name": "dev"
+        }
+      ]
+    },
+    {
+      "name": "ci",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "ci"
+        },
+        {
+          "type": "build",
+          "name": "ci"
+        },
+        {
+          "type": "test",
+          "name": "ci"
+        }
+      ]
+    }
+  ]
+}

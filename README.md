@@ -23,7 +23,7 @@
 
 ### Required build tools
 
-- CMake (minimum 3.20).
+- CMake (minimum **3.26** for `CMakePresets.json` workflows).
 - A C++ compiler with **C++26** support.
 - Ninja or Make.
 - Git (for submodules).
@@ -46,6 +46,25 @@ conda env create -f environment.yml
 # Existing environment:
 conda env update -n cpptensor -f environment.yml --prune
 ```
+
+## Canonical developer workflow (CMake presets)
+
+Run configure + build + test in one command:
+
+```bash
+conda run -n cpptensor cmake --workflow --preset dev
+```
+
+This executes configure/build/test in `build/dev`.
+
+### Other common presets
+
+- CI-style test workflow: `conda run -n cpptensor cmake --workflow --preset ci`
+- Release build: `conda run -n cpptensor cmake --preset release && conda run -n cpptensor cmake --build --preset release`
+- Sanitizers: `conda run -n cpptensor cmake --preset sanitizer && conda run -n cpptensor cmake --build --preset sanitizer && conda run -n cpptensor ctest --preset sanitizer`
+- Benchmarks (CPU target build): `conda run -n cpptensor cmake --preset benchmark && conda run -n cpptensor cmake --build --preset benchmark`
+
+## Manual CMake workflow (fallback)
 
 ### 2) Configure (tests/examples/benchmarks enabled)
 

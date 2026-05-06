@@ -1,0 +1,30 @@
+name: CMake Preset CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: false
+          activate-environment: cpptensor
+          environment-file: environment.yml
+          channels: conda-forge
+          channel-priority: strict
+
+      - name: Configure, build, and test via workflow preset
+        shell: bash -el {0}
+        run: |
+          conda env update -n cpptensor -f environment.yml --prune
+          conda run -n cpptensor cmake --workflow --preset ci
