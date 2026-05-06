@@ -385,6 +385,28 @@ void cpptensor::CPU::reluKernel(const Tensor& A, Tensor& Out) {
     }
 }
 
+void cpptensor::CPU::gemvKernel(const Tensor& A, const Tensor& x, Tensor& Out) {
+    const int64_t M = static_cast<int64_t>(A.shape()[0]);
+    const int64_t N = static_cast<int64_t>(A.shape()[1]);
+
+    if (x.shape().size() != 1 || x.shape()[0] != static_cast<size_t>(N) ||
+        Out.shape().size() != 1 || Out.shape()[0] != static_cast<size_t>(M)) {
+        throw std::runtime_error("CPU GEMV: shape mismatch (A: MxN, x: N, y: M)");
+    }
+
+    const auto& a = A.data();
+    const auto& x_data = x.data();
+    float* out = Out.data().data();
+
+    for (int64_t row = 0; row < M; ++row) {
+        float sum = 0.0f;
+        for (int64_t col = 0; col < N; ++col) {
+            sum += a[static_cast<size_t>(row * N + col)] * x_data[static_cast<size_t>(col)];
+        }
+        out[static_cast<size_t>(row)] = sum;
+    }
+}
+
 void cpptensor::CPU::gemmf32kernel(const Tensor &A, const Tensor &B, Tensor &Out) {
 
     //-----this is way too slow. not gonna work. commenting----
