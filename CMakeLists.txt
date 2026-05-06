@@ -4,6 +4,9 @@ cmake_minimum_required(VERSION 3.20)
 option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 option(USE_OPENBLAS "Use OpenBLAS if found on this system" ON)
+option(CPPTENSOR_BUILD_TESTS "Build cpptensor test targets" OFF)
+option(CPPTENSOR_BUILD_EXAMPLES "Build cpptensor example targets" OFF)
+option(CPPTENSOR_BUILD_BENCHMARKS "Build cpptensor benchmark targets" OFF)
 option(CPPTENSOR_ENABLE_ASAN "Enable AddressSanitizer instrumentation" OFF)
 option(CPPTENSOR_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer instrumentation" OFF)
 option(CPPTENSOR_ENABLE_TSAN "Enable ThreadSanitizer instrumentation" OFF)
@@ -240,14 +243,29 @@ else()
     message(STATUS "CUDA support disabled.")
 endif()
 
-# ==== Catch2 Submodule ====
-add_subdirectory(third_party/Catch2)
+# ==== Optional development targets ====
+if(CPPTENSOR_BUILD_TESTS)
+    message(STATUS "cpptensor tests: ENABLED")
+    add_subdirectory(third_party/Catch2)
+else()
+    message(STATUS "cpptensor tests: DISABLED")
+endif()
 
-# ==== Google Benchmark Submodule ====
-message(STATUS "Adding Google Benchmark from third_party/googlebenchmark")
-set(BENCHMARK_ENABLE_TESTING OFF) # disable GB's own tests
-set(BENCHMARK_ENABLE_INSTALL OFF)
-add_subdirectory(third_party/googlebenchmark)
+if(CPPTENSOR_BUILD_BENCHMARKS)
+    message(STATUS "cpptensor benchmarks: ENABLED")
+    message(STATUS "Adding Google Benchmark from third_party/googlebenchmark")
+    set(BENCHMARK_ENABLE_TESTING OFF) # disable GB's own tests
+    set(BENCHMARK_ENABLE_INSTALL OFF)
+    add_subdirectory(third_party/googlebenchmark)
+else()
+    message(STATUS "cpptensor benchmarks: DISABLED")
+endif()
+
+if(CPPTENSOR_BUILD_EXAMPLES)
+    message(STATUS "cpptensor examples: ENABLED")
+else()
+    message(STATUS "cpptensor examples: DISABLED")
+endif()
 
 # ==== Optional OpenBLAS Detection ====
 if(USE_OPENBLAS)
@@ -348,9 +366,19 @@ if(BUILD_CUDA)
 endif()
 
 # ==== Enable Testing ====
-enable_testing()
+if(CPPTENSOR_BUILD_TESTS)
+    enable_testing()
+endif()
 
-# ==== Add subdirectories====
-add_subdirectory(examples)
-add_subdirectory(test)
-add_subdirectory(benchmarks)
+# ==== Add optional subdirectories====
+if(CPPTENSOR_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
+if(CPPTENSOR_BUILD_TESTS)
+    add_subdirectory(test)
+endif()
+
+if(CPPTENSOR_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
