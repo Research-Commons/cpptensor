@@ -138,6 +138,8 @@ CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log
 - Reduce specific dimension: `A.sum(0)`, `A.sum(1)`, etc.
 - Keep dimension: `A.sum(1, keepdim=true)` preserves shape
 - Negative indexing: `A.sum(-1)` for last dimension
+- **0-D scalar contract:** true scalars use `shape == {}` and `ndim() == 0`
+  across reductions and shape ops (`view`, `squeeze`, `unsqueeze`, `print`)
 - Full test coverage: 2D and 3D tensors validated
 - **AVX2/AVX512 SIMD optimizations**: Vectorized implementations for max/min operations
 - Performance: CPU baseline + highly optimized AVX2/AVX512 kernels

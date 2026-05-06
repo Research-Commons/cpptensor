@@ -370,6 +370,10 @@ class Tensor {
          * Tensor A({2, 3, 4}, ...);  // 24 elements
          * Tensor B = A.view({4, 6}); // Same 24 elements, different shape
          * B.data()[0] = 1.0f;        // Also modifies A!
+         *
+         * Tensor s({}, {5});         // 0-D scalar
+         * Tensor s1 = s.view({1});   // Shape: {1}
+         * Tensor s0 = s1.view({});   // Shape: {}
          * ```
          */
         Tensor view(const std::vector<size_t>& new_shape) const;
@@ -455,6 +459,8 @@ class Tensor {
          * Tensor C = A.squeeze(1);     // Shape: {2, 3, 1}
          * Tensor D({1}, ...);
          * Tensor E = D.squeeze();      // Shape: {}
+         * Tensor F({}, {5});
+         * Tensor G = F.squeeze();      // Shape: {} (already scalar)
          * ```
          */
         Tensor squeeze(int dim = -1) const;
@@ -471,6 +477,9 @@ class Tensor {
          * Tensor B = A.unsqueeze(0);   // Shape: {1, 2, 3}
          * Tensor C = A.unsqueeze(1);   // Shape: {2, 1, 3}
          * Tensor D = A.unsqueeze(-1);  // Shape: {2, 3, 1}
+         *
+         * Tensor s({}, {5});
+         * Tensor s_vec = s.unsqueeze(0);   // Shape: {1}
          * ```
          */
         Tensor unsqueeze(int dim) const;
@@ -559,7 +568,8 @@ class Tensor {
          * Reduces the tensor by summing all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape []). For non-scalars, keepdim=true keeps
+         *         reduced axes as size-1 dimensions.
          *
          * @example
          * ```cpp
@@ -598,7 +608,8 @@ class Tensor {
          * Reduces the tensor by computing the mean of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape []). For non-scalars, keepdim=true keeps
+         *         reduced axes as size-1 dimensions.
          *
          * @example
          * ```cpp
@@ -637,7 +648,8 @@ class Tensor {
          * Reduces the tensor by finding the maximum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape []). For non-scalars, keepdim=true keeps
+         *         reduced axes as size-1 dimensions.
          *
          * @example
          * ```cpp
@@ -676,7 +688,8 @@ class Tensor {
          * Reduces the tensor by finding the minimum of all elements and returns a scalar.
          *
          * @param keepdim Keep all reduced dimensions as size 1 if true
-         * @return Tensor scalar (shape [] or [1,1,...,1] if keepdim=true)
+         * @return Tensor scalar (shape []). For non-scalars, keepdim=true keeps
+         *         reduced axes as size-1 dimensions.
          *
          * @example
          * ```cpp

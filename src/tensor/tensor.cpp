@@ -149,6 +149,11 @@ namespace cpptensor {
         const float* data_ptr = impl->data_ptr();
         size_t total_elements = numel();
 
+        if (s.empty()) {
+            std::cout << data_ptr[0] << "])\n";
+            return;
+        }
+
         // Helper to convert flat index to multi-dimensional indices
         auto flat_to_indices = [&](size_t flat_idx) -> std::vector<size_t> {
             std::vector<size_t> indices(s.size());
@@ -553,12 +558,12 @@ namespace cpptensor {
 
     Tensor Tensor::max(bool keepdim) const {
         require_impl(__func__);
-        return cpptensor::max(*this, -1, keepdim);
+        return cpptensor::max(*this, std::nullopt, keepdim);
     }
 
     Tensor Tensor::min(bool keepdim) const {
         require_impl(__func__);
-        return cpptensor::min(*this, -1, keepdim);
+        return cpptensor::min(*this, std::nullopt, keepdim);
     }
 
     // Dimensional reduction overloads (with dim parameter)
@@ -574,20 +579,12 @@ namespace cpptensor {
 
     Tensor Tensor::max(int dim, bool keepdim) const {
         require_impl(__func__);
-        int actual_dim = dim;
-        if (actual_dim < 0) {
-            actual_dim += static_cast<int>(ndim());
-        }
-        return cpptensor::max(*this, actual_dim, keepdim);
+        return cpptensor::max(*this, std::optional<int>(dim), keepdim);
     }
 
     Tensor Tensor::min(int dim, bool keepdim) const {
         require_impl(__func__);
-        int actual_dim = dim;
-        if (actual_dim < 0) {
-            actual_dim += static_cast<int>(ndim());
-        }
-        return cpptensor::min(*this, actual_dim, keepdim);
+        return cpptensor::min(*this, std::optional<int>(dim), keepdim);
     }
 
 } // namespace cpptensor

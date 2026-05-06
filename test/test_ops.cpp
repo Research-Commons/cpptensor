@@ -37,6 +37,7 @@
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -814,6 +815,78 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.max(0), {4, 5, 6});
     require_shape(t.min(-1), {2});
     require_data(t.min(-1), {1, 4});
+}
+
+TEST_CASE("0-D scalar contract stays consistent across reductions and shape ops",
+          "[scalar][reduction][manipulation][print]") {
+    cpptensor::initialize_kernels();
+
+    cpptensor::Tensor scalar(std::vector<size_t>{}, std::vector<float>{5});
+    require_shape(scalar, {});
+    REQUIRE(scalar.ndim() == 0);
+    require_data(scalar, {5});
+
+    auto viewed = scalar.view({1});
+    require_shape(viewed, {1});
+    require_data(viewed, {5});
+
+    auto viewed_back = viewed.view({});
+    require_shape(viewed_back, {});
+    require_data(viewed_back, {5});
+
+    auto unsqueezed = scalar.unsqueeze(0);
+    require_shape(unsqueezed, {1});
+    require_data(unsqueezed, {5});
+
+    auto squeezed_back = unsqueezed.squeeze();
+    require_shape(squeezed_back, {});
+    require_data(squeezed_back, {5});
+
+    require_shape(scalar.sum(), {});
+    require_data(scalar.sum(), {5});
+    require_shape(scalar.sum(true), {});
+    require_data(scalar.sum(true), {5});
+
+    require_shape(scalar.mean(), {});
+    require_data(scalar.mean(), {5});
+    require_shape(scalar.mean(true), {});
+    require_data(scalar.mean(true), {5});
+
+    require_shape(scalar.max(), {});
+    require_data(scalar.max(), {5});
+    require_shape(scalar.max(true), {});
+    require_data(scalar.max(true), {5});
+
+    require_shape(scalar.min(), {});
+    require_data(scalar.min(), {5});
+    require_shape(scalar.min(true), {});
+    require_data(scalar.min(true), {5});
+
+    cpptensor::Tensor v({3}, {1, 2, 3});
+    require_shape(v.sum(true), {1});
+    require_shape(v.mean(true), {1});
+    require_shape(v.max(true), {1});
+    require_shape(v.min(true), {1});
+
+    cpptensor::Tensor m({2, 2}, {1, 2, 3, 4});
+    require_shape(m.sum(true), {1, 1});
+    require_shape(m.mean(true), {1, 1});
+    require_shape(m.max(true), {1, 1});
+    require_shape(m.min(true), {1, 1});
+
+    std::ostringstream printed;
+    auto* original = std::cout.rdbuf(printed.rdbuf());
+    scalar.print();
+    std::cout.rdbuf(original);
+    REQUIRE(printed.str() == "Tensor(shape=[], values=[5])\n");
+}
+
+TEST_CASE("max and min reject dimensions smaller than -rank", "[reduction]") {
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+    REQUIRE_THROWS_WITH(matrix.max(-3),
+                        Catch::Matchers::ContainsSubstring("out of range"));
+    REQUIRE_THROWS_WITH(matrix.min(-3),
+                        Catch::Matchers::ContainsSubstring("out of range"));
 }
 
 TEST_CASE("contiguous materializes view values from the logical view start", "[tensor][contiguous]") {
