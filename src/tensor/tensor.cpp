@@ -3,6 +3,7 @@
 #include "cpptensor/ops/reduction/mean.hpp"
 #include "cpptensor/ops/reduction/max.hpp"
 #include "cpptensor/ops/reduction/min.hpp"
+#include "cpptensor/utils/broadcastUtils.hpp"
 
 #include <random>
 #include <algorithm>
@@ -940,6 +941,77 @@ namespace cpptensor {
         }
 
         return reshape(new_shape);
+    }
+
+    Tensor Tensor::expand(const std::vector<size_t>& target_shape) const {
+        const auto impl = require_impl(__func__);
+        const auto source_shape = impl->shape();
+
+        if (source_shape == target_shape) {
+            return *this;
+        }
+
+        const auto expanded_stride = compute_broadcast_view_strides(source_shape,
+                                                                    impl->stride(),
+                                                                    target_shape);
+
+        auto view_impl = std::make_shared<TensorImpl>(impl, target_shape, expanded_stride, 0);
+        return Tensor(std::move(view_impl));
+    }
+
+    Tensor Tensor::broadcast_to(const std::vector<size_t>& target_shape) const {
+        require_impl(__func__);
+        return expand(target_shape);
+    }
+
+    Tensor Tensor::repeat(const std::vector<size_t>& repeats) const {
+        const auto impl = require_impl(__func__);
+        const auto source_shape = impl->shape();
+        const auto source_stride = impl->stride();
+
+        if (repeats.size() < source_shape.size()) {
+            throw std::runtime_error(
+                "repeat: repeats rank (" + std::to_string(repeats.size()) +
+                ") must be >= tensor rank (" + std::to_string(source_shape.size()) + ")");
+        }
+
+        std::vector<size_t> out_shape(repeats.size(), 1);
+        std::vector<size_t> padded_source_shape(repeats.size(), 1);
+        std::vector<size_t> padded_source_stride(repeats.size(), 0);
+
+        const size_t lead = repeats.size() - source_shape.size();
+        for (size_t i = 0; i < source_shape.size(); ++i) {
+            padded_source_shape[lead + i] = source_shape[i];
+            padded_source_stride[lead + i] = source_stride[i];
+        }
+
+        for (size_t axis = 0; axis < repeats.size(); ++axis) {
+            out_shape[axis] = padded_source_shape[axis] * repeats[axis];
+        }
+
+        const size_t out_total = cpptensor::numel(out_shape);
+        std::vector<float> out_data(out_total, 0.0f);
+        if (out_total == 0) {
+            return Tensor(out_shape, out_data, device_type());
+        }
+
+        const auto out_stride = compute_strides(out_shape);
+        const float* src = impl->data_ptr();
+        for (size_t pos = 0; pos < out_total; ++pos) {
+            size_t tmp = pos;
+            size_t src_offset = 0;
+            for (size_t axis = 0; axis < out_shape.size(); ++axis) {
+                const size_t coord = tmp / out_stride[axis];
+                tmp %= out_stride[axis];
+
+                const size_t src_dim = padded_source_shape[axis];
+                const size_t src_coord = (src_dim == 0) ? 0 : (coord % src_dim);
+                src_offset += src_coord * padded_source_stride[axis];
+            }
+            out_data[pos] = src[src_offset];
+        }
+
+        return Tensor(out_shape, out_data, device_type());
     }
 
     Tensor Tensor::permute(const std::vector<int>& dims) const {

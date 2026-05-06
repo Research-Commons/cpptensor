@@ -203,42 +203,26 @@ namespace cpptensor {
             return C;
         }
 
-        //stride is used later to help us calculate how far a slice is from the batch
-        const auto& Astride = A.stride();
-        const auto& Bstride = B.stride();
+        std::vector<size_t> expanded_a_shape = out_batch;
+        expanded_a_shape.push_back(M);
+        expanded_a_shape.push_back(K);
+
+        std::vector<size_t> expanded_b_shape = out_batch;
+        expanded_b_shape.push_back(K);
+        expanded_b_shape.push_back(N);
+
+        Tensor A_expanded = A.broadcast_to(expanded_a_shape);
+        Tensor B_expanded = B.broadcast_to(expanded_b_shape);
+
+        // Strides include zero-stride broadcasted batch axes.
+        const auto& Astride = A_expanded.stride();
+        const auto& Bstride = B_expanded.stride();
         const auto& Cstride = C.stride();
-
-        const size_t LA = Abatch.size(); // A batch rank
-        const size_t LB = Bbatch.size(); // B batch rank
         const size_t LO = out_batch.size(); // output batch rank
-
-        // calc the offsets when aligning A/B batches to output batch
-        const size_t offA = LO - LA; // where A batch dims begin inside out_batch
-        const size_t offB = LO - LB; // where B batch dims begin inside out_batch
 
         // total num of matmul calls based on batch dims in output
         size_t batch_count = 1;
         for (size_t d : out_batch) batch_count *= d;
-
-        //Helper Lambda that maps a multi-dimensional batch index to a linear memory offset.
-        auto compute_base_offset = [](const std::vector<size_t>& batch_index, // full output batch index
-                                      const std::vector<size_t>& t_batch_shape, // tensor A/B batch shape
-                                      const std::vector<size_t>& t_stride, // tensor A/B stride
-                                      size_t rank_t_batch, // number of batch dims in A/B
-                                      size_t align_offset // how many leading output dims to skip
-                                      ) -> size_t {
-            // if no batch dims, the only slice is the matrix at offset 0
-            if (rank_t_batch == 0) return 0;
-
-            size_t off = 0;
-            for (size_t d = 0; d < rank_t_batch; ++d) {
-                const size_t out_d = align_offset + d; // corresponding dim in output batch
-                const size_t dim   = t_batch_shape[d];
-                const size_t idx   = (dim == 1) ? 0 : batch_index[out_d];
-                off += idx * t_stride[d]; // stride[d] corresponds to batch dim d
-            }
-            return off;
-        };
 
         // for each batch_index in batch_count:
         // find which slice of A to pick
@@ -259,15 +243,17 @@ namespace cpptensor {
                 tmp = (dim == 0) ? tmp : (tmp / dim);
             }
 
-            // compute base offsets into A/B/C for this batch (last two dims start at 0)
-            //where in A's memory does this slice start?
-            const size_t baseA = compute_base_offset(batch_index, Abatch, Astride, LA, offA);
-            const size_t baseB = compute_base_offset(batch_index, Bbatch, Bstride, LB, offB);
-            //where in C's memory should I write the result?
-            const size_t baseC = compute_base_offset(batch_index, out_batch, Cstride, LO, 0);
+            size_t baseA = 0;
+            size_t baseB = 0;
+            size_t baseC = 0;
+            for (size_t d = 0; d < LO; ++d) {
+                baseA += batch_index[d] * Astride[d];
+                baseB += batch_index[d] * Bstride[d];
+                baseC += batch_index[d] * Cstride[d];
+            }
 
-            Tensor A2D = make_batched_matrix_view(A, baseA);
-            Tensor B2D = make_batched_matrix_view(B, baseB);
+            Tensor A2D = make_batched_matrix_view(A_expanded, baseA);
+            Tensor B2D = make_batched_matrix_view(B_expanded, baseB);
 
             // Call gemm on the 2D slices
             Tensor C2D = gemm(A2D, B2D);

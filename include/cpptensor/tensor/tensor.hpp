@@ -609,6 +609,38 @@ class Tensor {
         Tensor unsqueeze(int dim) const;
 
         /**
+         * @brief Expand tensor to target shape using zero-copy broadcasted view
+         *
+         * Expands dimensions of size 1 to larger sizes by setting stride 0 on
+         * those axes. No data is copied.
+         *
+         * @param target_shape Desired broadcasted shape
+         * @return Broadcasted tensor view
+         * @throws std::runtime_error if target_shape is not broadcast-compatible
+         */
+        Tensor expand(const std::vector<size_t>& target_shape) const;
+
+        /**
+         * @brief Alias of expand() for explicit broadcasting intent
+         *
+         * @param target_shape Desired broadcasted shape
+         * @return Broadcasted tensor view
+         */
+        Tensor broadcast_to(const std::vector<size_t>& target_shape) const;
+
+        /**
+         * @brief Repeat tensor along each dimension (materialized copy)
+         *
+         * Similar to NumPy tile / PyTorch repeat semantics. Unlike expand(),
+         * this allocates new storage.
+         *
+         * @param repeats Repeat factors per output dimension
+         * @return Materialized repeated tensor
+         * @throws std::runtime_error if repeats rank < tensor rank
+         */
+        Tensor repeat(const std::vector<size_t>& repeats) const;
+
+        /**
          * @brief Permute tensor dimensions (generalized transpose)
          *
          * Reorders dimensions according to the given permutation. This creates

@@ -139,14 +139,21 @@ inline Tensor dispatchBinaryOp(const Tensor& lhs,
                                CpuBroadcastKernel&& cpu_broadcast_kernel) {
     const BinaryOpContext context = prepareBinaryOp(lhs, rhs);
     Tensor out = allocateBinaryOpOutput(context);
-    const Tensor prepared_lhs = materialize_for_backend_input(lhs);
-    const Tensor prepared_rhs = materialize_for_backend_input(rhs);
 
     if (context.use_cpu_broadcast_kernel) {
-        std::forward<CpuBroadcastKernel>(cpu_broadcast_kernel)(prepared_lhs, prepared_rhs, out);
-    } else {
-        KernelRegistry::instance().getKernel(op, context.device)(prepared_lhs, prepared_rhs, out);
+        // Keep CPU broadcast execution view-based to avoid materializing
+        // full-sized broadcasted operand buffers eagerly.
+        std::forward<CpuBroadcastKernel>(cpu_broadcast_kernel)(lhs, rhs, out);
+        return out;
     }
+
+    const Tensor broadcast_lhs = lhs.broadcast_to(context.output_shape);
+    const Tensor broadcast_rhs = rhs.broadcast_to(context.output_shape);
+
+    const Tensor prepared_lhs = materialize_for_backend_input(broadcast_lhs);
+    const Tensor prepared_rhs = materialize_for_backend_input(broadcast_rhs);
+
+    KernelRegistry::instance().getKernel(op, context.device)(prepared_lhs, prepared_rhs, out);
 
     return out;
 }

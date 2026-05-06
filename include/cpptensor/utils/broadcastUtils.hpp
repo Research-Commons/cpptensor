@@ -1,6 +1,8 @@
 #pragma once
+#include <algorithm>
 #include <vector>
 #include <cstddef>
+#include <sstream>
 #include <stdexcept>
 
 namespace cpptensor {
@@ -60,6 +62,71 @@ namespace cpptensor {
             out_sh[(size_t)i] = std::max(a_dim, b_dim);
         }
         return out_sh;
+    }
+
+    inline std::string format_shape(const std::vector<size_t>& shape) {
+        std::ostringstream stream;
+        stream << '[';
+        for (size_t i = 0; i < shape.size(); ++i) {
+            if (i != 0) {
+                stream << ", ";
+            }
+            stream << shape[i];
+        }
+        stream << ']';
+        return stream.str();
+    }
+
+    /**
+     * Compute strides for a broadcasted zero-copy view.
+     *
+     * The returned strides have target_shape rank. Dimensions expanded from size
+     * 1 use stride 0 so repeated coordinates alias the same source element.
+     *
+     * @throws std::runtime_error if source cannot broadcast to target shape
+     */
+    inline std::vector<size_t> compute_broadcast_view_strides(const std::vector<size_t>& source_shape,
+                                                              const std::vector<size_t>& source_stride,
+                                                              const std::vector<size_t>& target_shape) {
+        if (source_shape.size() != source_stride.size()) {
+            throw std::runtime_error("compute_broadcast_view_strides: source shape/stride rank mismatch");
+        }
+        if (target_shape.size() < source_shape.size()) {
+            throw std::runtime_error(
+                "compute_broadcast_view_strides: cannot broadcast rank-" +
+                std::to_string(source_shape.size()) + " shape " + format_shape(source_shape) +
+                " to lower rank target " + format_shape(target_shape));
+        }
+
+        const size_t source_rank = source_shape.size();
+        const size_t target_rank = target_shape.size();
+        const size_t lead = target_rank - source_rank;
+
+        std::vector<size_t> expanded_stride(target_rank, 0);
+        for (size_t axis = 0; axis < target_rank; ++axis) {
+            const size_t target_dim = target_shape[axis];
+            const bool has_source_axis = axis >= lead;
+            const size_t source_dim = has_source_axis ? source_shape[axis - lead] : 1;
+            const size_t source_axis_stride = has_source_axis ? source_stride[axis - lead] : 0;
+
+            if (source_dim == target_dim) {
+                expanded_stride[axis] = source_axis_stride;
+                continue;
+            }
+
+            if (source_dim == 1) {
+                expanded_stride[axis] = 0;
+                continue;
+            }
+
+            throw std::runtime_error(
+                "compute_broadcast_view_strides: shape " + format_shape(source_shape) +
+                " is not broadcastable to " + format_shape(target_shape) +
+                " at aligned axis " + std::to_string(axis) +
+                " (" + std::to_string(source_dim) + " vs " + std::to_string(target_dim) + ")");
+        }
+
+        return expanded_stride;
     }
 
     /** product of dims */
@@ -123,4 +190,4 @@ namespace cpptensor {
         }
         return squeezed;
     }
-} // namespace cppgrad
+} // namespace cpptensor

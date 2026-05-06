@@ -133,3 +133,46 @@ TEST_CASE("slice plus transpose remains correct with tuple-style indexing",
     REQUIRE(transposed.shape() == std::vector<size_t>{2, 2});
     require_data(transposed, {4, 8, 6, 10});
 }
+
+TEST_CASE("expand and broadcast_to create zero-copy broadcast views", "[tensor][views][broadcast]") {
+    cpptensor::Tensor row({1, 3}, {1, 2, 3});
+
+    auto expanded = row.expand({4, 3});
+    REQUIRE(expanded.shape() == std::vector<size_t>{4, 3});
+    REQUIRE(expanded.stride() == std::vector<size_t>{0, 1});
+    REQUIRE(expanded.impl()->data_ptr() == row.impl()->data_ptr());
+    require_data(expanded, {1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3});
+    REQUIRE_THROWS(expanded.data());
+
+    auto mixed_rank = row.broadcast_to({2, 1, 3});
+    REQUIRE(mixed_rank.shape() == std::vector<size_t>{2, 1, 3});
+    REQUIRE(mixed_rank.stride() == std::vector<size_t>{0, 3, 1});
+    require_data(mixed_rank, {1, 2, 3, 1, 2, 3});
+}
+
+TEST_CASE("expand rejects incompatible target shapes", "[tensor][views][broadcast]") {
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+
+    REQUIRE_THROWS(matrix.expand({3, 3}));
+    REQUIRE_THROWS(matrix.broadcast_to({3}));
+}
+
+TEST_CASE("repeat materializes tiled tensors from contiguous and view inputs", "[tensor][repeat]") {
+    cpptensor::Tensor base({2, 1}, {1, 2});
+    REQUIRE_THROWS(base.repeat({2}));
+
+    auto repeated = base.repeat({1, 3});
+    REQUIRE(repeated.shape() == std::vector<size_t>{2, 3});
+    require_data(repeated, {1, 1, 1, 2, 2, 2});
+
+    cpptensor::Tensor vector({3}, {1, 2, 3});
+    auto mixed_rank = vector.repeat({2, 2});
+    REQUIRE(mixed_rank.shape() == std::vector<size_t>{2, 6});
+    require_data(mixed_rank, {1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3});
+
+    cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
+    auto transposed = matrix.transpose();
+    auto transposed_repeat = transposed.repeat({1, 2});
+    REQUIRE(transposed_repeat.shape() == std::vector<size_t>{3, 4});
+    require_data(transposed_repeat, {1, 4, 1, 4, 2, 5, 2, 5, 3, 6, 3, 6});
+}
