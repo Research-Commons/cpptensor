@@ -63,6 +63,25 @@ void mul_kernel_broadcast(const float* a, const float* b, float* out,
 
 
 namespace cpptensor {
+    namespace {
+        const Tensor& prepare_cuda_compact_operand(const Tensor& input, std::optional<Tensor>& materialized) {
+            // Kernel indexing below assumes compact row-major storage.
+            if (!input.is_contiguous()) {
+                materialized = input.contiguous();
+                return *materialized;
+            }
+
+            // Some contiguous views (for example from_ptr-backed tensors) still do not
+            // expose CUDA storage. Probe once and materialize a safe fallback if needed.
+            try {
+                (void)input.impl()->backend_data_ptr(DeviceType::CUDA);
+                return input;
+            } catch (const std::runtime_error&) {
+                materialized = input.contiguous();
+                return *materialized;
+            }
+        }
+    } // namespace
 
     void CUDA::addKernel(const Tensor& A, const Tensor& B, Tensor& out) {
         if (!out.is_contiguous()) {
@@ -74,8 +93,8 @@ namespace cpptensor {
         // CUDA add/mul kernels below currently assume compact row-major inputs.
         std::optional<Tensor> a_compact;
         std::optional<Tensor> b_compact;
-        const Tensor& a_tensor = A.is_contiguous() ? A : (a_compact = A.contiguous(), *a_compact);
-        const Tensor& b_tensor = B.is_contiguous() ? B : (b_compact = B.contiguous(), *b_compact);
+        const Tensor& a_tensor = prepare_cuda_compact_operand(A, a_compact);
+        const Tensor& b_tensor = prepare_cuda_compact_operand(B, b_compact);
 
         // Prepare shapes and strides (same logic as CPU)
         const auto& a_sh = a_tensor.shape();
@@ -155,8 +174,8 @@ namespace cpptensor {
         // CUDA add/mul kernels below currently assume compact row-major inputs.
         std::optional<Tensor> a_compact;
         std::optional<Tensor> b_compact;
-        const Tensor& a_tensor = A.is_contiguous() ? A : (a_compact = A.contiguous(), *a_compact);
-        const Tensor& b_tensor = B.is_contiguous() ? B : (b_compact = B.contiguous(), *b_compact);
+        const Tensor& a_tensor = prepare_cuda_compact_operand(A, a_compact);
+        const Tensor& b_tensor = prepare_cuda_compact_operand(B, b_compact);
 
         // Prepare shapes and strides (same logic as CPU)
         const auto& a_sh = a_tensor.shape();
