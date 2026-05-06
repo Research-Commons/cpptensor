@@ -7,6 +7,7 @@ add_executable(cpptensor_test ${TEST_SOURCES})
 
 # Link with main cpptensor lib and Catch2
 target_link_libraries(cpptensor_test PRIVATE cpptensor Catch2::Catch2WithMain)
+cpptensor_apply_build_profile(cpptensor_test)
 cpptensor_apply_build_safety_flags(cpptensor_test)
 
 # Enable test discovery via CTest and Catch2
@@ -16,6 +17,7 @@ catch_discover_tests(cpptensor_test)
 
 add_executable(cpptensor_lazy_init_smoke lazy_init_smoke.cpp)
 target_link_libraries(cpptensor_lazy_init_smoke PRIVATE cpptensor)
+cpptensor_apply_build_profile(cpptensor_lazy_init_smoke)
 cpptensor_apply_build_safety_flags(cpptensor_lazy_init_smoke)
 add_test(NAME cpptensor_lazy_init_smoke COMMAND cpptensor_lazy_init_smoke)
 
@@ -84,4 +86,26 @@ if(CMAKE_GENERATOR)
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
         )
     endif()
+endif()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME benchmark_regression_check_passes
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/compare_benchmark_results.py
+            --baseline ${CMAKE_SOURCE_DIR}/test/data/benchmarks/baseline.json
+            --candidate ${CMAKE_SOURCE_DIR}/test/data/benchmarks/candidate-ok.json
+            --max-regression-pct 5
+    )
+
+    add_test(
+        NAME benchmark_regression_check_detects_slowdown
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/compare_benchmark_results.py
+            --baseline ${CMAKE_SOURCE_DIR}/test/data/benchmarks/baseline.json
+            --candidate ${CMAKE_SOURCE_DIR}/test/data/benchmarks/candidate-regression.json
+            --max-regression-pct 5
+    )
+    set_tests_properties(benchmark_regression_check_detects_slowdown PROPERTIES WILL_FAIL TRUE)
 endif()

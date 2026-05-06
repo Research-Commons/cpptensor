@@ -344,6 +344,16 @@ class Tensor {
         DType dtype() const;
 
         /**
+         * @brief Return a tensor copy on the requested device
+         */
+        Tensor to(DeviceType device) const;
+
+        /**
+         * @brief Explicit alias for device copy semantics
+         */
+        Tensor copy_to(DeviceType device) const;
+
+        /**
          * @brief Print tensor data in compact format
          *
          * Prints tensor shape and flattened data values.

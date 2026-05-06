@@ -11,6 +11,9 @@ Tensor dot(const Tensor& A, const Tensor& B) {
     if (A.device_type() != B.device_type()) {
         throw std::runtime_error("dot: device mismatch");
     }
+    if (A.device_type() == DeviceType::CUDA) {
+        throw_cuda_unsupported("dot");
+    }
 
     const auto& Ash = A.shape();
     const auto& Bsh = B.shape();
