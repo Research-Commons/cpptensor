@@ -1,20 +1,19 @@
 #include "cpptensor/ops/comparison/eq.hpp"
 
-#include "cpptensor/backend/cpu_backend.h"
-#include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/ops/comparison/comparison_common.hpp"
 
 namespace cpptensor {
 
 Tensor eq(const Tensor& a, const Tensor& b) {
-    return dispatchBinaryOp(a, b, OpType::Eq, CPU::eqKernel);
+    return compare_tensors(a, b, std::equal_to<float>{});
 }
 
 Tensor eq(const Tensor& a, float scalar) {
-    return eq(a, Tensor::full(a.shape(), scalar, a.device_type()));
+    return eq(a, Tensor::full(a.shape(), scalar, a.device_type(), a.dtype()));
 }
 
 Tensor eq(float scalar, const Tensor& b) {
-    return eq(Tensor::full(b.shape(), scalar, b.device_type()), b);
+    return eq(Tensor::full(b.shape(), scalar, b.device_type(), b.dtype()), b);
 }
 
 Tensor operator==(const Tensor& a, const Tensor& b) {
