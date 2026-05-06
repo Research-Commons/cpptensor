@@ -395,6 +395,18 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::cat({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 4});
+    require_data(cuda_from_view, {
+        0, 3, 0, 3,
+        1, 4, 1, 4,
+        2, 5, 2, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
@@ -570,6 +582,18 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::stack({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 2, 2});
+    require_data(cuda_from_view, {
+        0, 0, 3, 3,
+        1, 1, 4, 4,
+        2, 2, 5, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
