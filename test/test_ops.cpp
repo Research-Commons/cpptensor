@@ -269,6 +269,27 @@ void require_nan_data(const cpptensor::Tensor& tensor) {
     }
 }
 
+void run_cpu_dispatch_paths(const std::function<void()>& assertion) {
+    {
+        ScopedCpuIsaOverride generic_only("generic");
+        assertion();
+    }
+
+#ifdef BUILD_AVX2
+    if (cpptensor::has_avx2()) {
+        ScopedCpuIsaOverride avx2_only("avx2");
+        assertion();
+    }
+#endif
+}
+
+float expected_pow_domain_semantics(float base, float exponent) {
+    if (base < 0.0f && std::isfinite(base) && std::isfinite(exponent) && std::trunc(exponent) != exponent) {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    return std::pow(base, exponent);
+}
+
 void require_broadcast_arithmetic_results() {
     cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor row({1, 3}, {10, 20, 30});
@@ -368,6 +389,12 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
+    REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
 }
 
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
@@ -537,6 +564,12 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
     cpptensor::Tensor cpu({2}, {5, 6}, DeviceType::CPU);
     REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
                         Catch::Matchers::ContainsSubstring("same device"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cuda_a, cpu}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CUDA"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
+    REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
+                        Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
@@ -816,6 +849,60 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.min(-1), {1, 4});
 }
 
+TEST_CASE("non-contiguous view regressions match contiguous baselines",
+          "[ops][views][regression]") {
+    cpptensor::Tensor matrix({3, 4}, {
+        1, 2, 3, 4,
+        5, 6, 7, 8,
+        9, 10, 11, 12
+    });
+
+    SECTION("slice sum matches contiguous baseline") {
+        auto sliced = matrix.slice(1, 0, 4, 2);
+        REQUIRE_FALSE(sliced.is_contiguous());
+
+        auto baseline = sliced.contiguous();
+        auto sliced_sum = sliced.sum(0);
+        auto baseline_sum = baseline.sum(0);
+
+        require_shape(sliced_sum, baseline_sum.shape());
+        require_data(sliced_sum, baseline_sum.data());
+    }
+
+    SECTION("transpose clone preserves logical order") {
+        auto transposed = matrix.transpose();
+        auto cloned = transposed.clone();
+        auto baseline = transposed.contiguous();
+
+        require_shape(cloned, baseline.shape());
+        require_data(cloned, baseline.data());
+    }
+
+    SECTION("chained views stay layout-correct across unary and reductions") {
+        auto chained = matrix.transpose().slice(0, 1, 4).slice(1, 0, 3, 2);
+        REQUIRE_FALSE(chained.is_contiguous());
+
+        auto baseline = chained.contiguous();
+        require_data(cpptensor::exp(chained), cpptensor::exp(baseline).data());
+        require_data(chained.sum(1), baseline.sum(1).data());
+    }
+
+    SECTION("from_ptr-backed views match contiguous baselines") {
+        cpptensor::Tensor owner({8}, {0, 1, 2, 3, 4, 5, 6, 7});
+        auto from_ptr_view = cpptensor::Tensor::from_ptr(
+            {6},
+            owner.data().data() + 1,
+            owner.impl(),
+            owner.device_type());
+        auto stepped = from_ptr_view.slice(0, 0, 6, 2);
+        REQUIRE_FALSE(stepped.is_contiguous());
+
+        auto baseline = stepped.contiguous();
+        require_data(-stepped, (-baseline).data());
+        require_data(stepped.sum(0), baseline.sum(0).data());
+    }
+}
+
 TEST_CASE("contiguous materializes view values from the logical view start", "[tensor][contiguous]") {
     cpptensor::Tensor base({4}, {0, 1, 2, 3});
 
@@ -975,140 +1062,101 @@ TEST_CASE("division preserves IEEE divide-by-zero semantics across CPU paths",
           "[arithmetic][div][ieee]") {
     cpptensor::initialize_kernels();
 
-    const float nan = std::numeric_limits<float>::quiet_NaN();
-    const float inf = std::numeric_limits<float>::infinity();
-
-    cpptensor::Tensor numerators({4}, {2.0f, -2.0f, 0.0f, 1.0f});
-    cpptensor::Tensor denominators({4}, {0.0f, 0.0f, 0.0f, -0.0f});
-    std::vector<float> expected = {inf, -inf, nan, -inf};
-
-    {
-        ScopedCpuIsaOverride generic_only("generic");
-        require_ieee_data(numerators / denominators, expected);
+    const std::vector<float> numerators = {2.0f, -2.0f, 0.0f, 1.0f, -1.0f, 5.0f};
+    const std::vector<float> denominators = {0.0f, 0.0f, 0.0f, -0.0f, -0.0f, -0.0f};
+    std::vector<float> expected;
+    expected.reserve(numerators.size());
+    for (size_t i = 0; i < numerators.size(); ++i) {
+        expected.push_back(numerators[i] / denominators[i]);
     }
 
-    {
-        ScopedCpuIsaOverride generic_only("generic");
-        cpptensor::Tensor broadcasted_denominator({1}, std::vector<float>{0.0f});
-        require_ieee_data(
-            numerators / broadcasted_denominator,
-            {inf, -inf, nan, inf});
-    }
+    cpptensor::Tensor numerator_tensor({numerators.size()}, numerators);
+    cpptensor::Tensor denominator_tensor({denominators.size()}, denominators);
 
-#ifdef BUILD_AVX2
-    if (cpptensor::has_avx2()) {
-        ScopedCpuIsaOverride avx2_only("avx2");
-        require_ieee_data(numerators / denominators, expected);
-    }
-#endif
+    run_cpu_dispatch_paths([&]() {
+        require_ieee_data(numerator_tensor / denominator_tensor, expected);
+    });
+
+    ScopedCpuIsaOverride generic_only("generic");
+    cpptensor::Tensor broadcasted_denominator({1}, std::vector<float>{0.0f});
+    require_ieee_data(
+        numerator_tensor / broadcasted_denominator,
+        {
+            numerators[0] / 0.0f,
+            numerators[1] / 0.0f,
+            numerators[2] / 0.0f,
+            numerators[3] / 0.0f,
+            numerators[4] / 0.0f,
+            numerators[5] / 0.0f,
+        });
 }
 
 TEST_CASE("log preserves std domain-edge semantics across CPU dispatch paths",
           "[math][log][domain]") {
     cpptensor::initialize_kernels();
 
-    const float nan = std::numeric_limits<float>::quiet_NaN();
     const float inf = std::numeric_limits<float>::infinity();
-
-    cpptensor::Tensor input(
-        {9},
-        {1.0f, 0.0f, -1.0f, std::exp(1.0f), inf, nan, 0.5f, -0.0f, 2.0f});
-    const std::vector<float> expected = {
-        0.0f,
-        -inf,
-        nan,
-        1.0f,
-        inf,
-        nan,
-        std::log(0.5f),
-        -inf,
-        std::log(2.0f),
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::vector<float> inputs = {
+        1.0f, 0.0f, -1.0f, std::exp(1.0f), inf, nan, 0.5f, -0.0f, 2.0f, 1000.0f
     };
 
-    {
-        ScopedCpuIsaOverride generic_only("generic");
-        require_ieee_data(cpptensor::log(input), expected);
+    std::vector<float> expected;
+    expected.reserve(inputs.size());
+    for (float value : inputs) {
+        expected.push_back(std::log(value));
     }
 
-#ifdef BUILD_AVX2
-    if (cpptensor::has_avx2()) {
-        ScopedCpuIsaOverride avx2_only("avx2");
-        require_ieee_data(cpptensor::log(input), expected);
-    }
-#endif
+    cpptensor::Tensor input_tensor({inputs.size()}, inputs);
+    run_cpu_dispatch_paths([&]() {
+        require_ieee_data(cpptensor::log(input_tensor), expected);
+    });
 }
 
 TEST_CASE("sqrt preserves std domain-edge semantics across CPU dispatch paths",
           "[math][sqrt][domain]") {
     cpptensor::initialize_kernels();
 
-    const float nan = std::numeric_limits<float>::quiet_NaN();
     const float inf = std::numeric_limits<float>::infinity();
-
-    cpptensor::Tensor input(
-        {9},
-        {-4.0f, -1.0f, -0.0f, 0.0f, 4.0f, 9.0f, inf, nan, 16.0f});
-    const std::vector<float> expected = {
-        nan,
-        nan,
-        -0.0f,
-        0.0f,
-        2.0f,
-        3.0f,
-        inf,
-        nan,
-        4.0f,
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::vector<float> inputs = {
+        -4.0f, -1.0f, -0.0f, 0.0f, 4.0f, 9.0f, inf, nan, 16.0f, 0.25f
     };
 
-    {
-        ScopedCpuIsaOverride generic_only("generic");
-        require_ieee_data(cpptensor::sqrt(input), expected);
+    std::vector<float> expected;
+    expected.reserve(inputs.size());
+    for (float value : inputs) {
+        expected.push_back(std::sqrt(value));
     }
 
-#ifdef BUILD_AVX2
-    if (cpptensor::has_avx2()) {
-        ScopedCpuIsaOverride avx2_only("avx2");
-        require_ieee_data(cpptensor::sqrt(input), expected);
-    }
-#endif
+    cpptensor::Tensor input_tensor({inputs.size()}, inputs);
+    run_cpu_dispatch_paths([&]() {
+        require_ieee_data(cpptensor::sqrt(input_tensor), expected);
+    });
 }
 
 TEST_CASE("pow preserves signed-zero and zero-base edge semantics", "[arithmetic][pow][domain]") {
     cpptensor::initialize_kernels();
 
-    const float nan = std::numeric_limits<float>::quiet_NaN();
     const float neg_zero = -0.0f;
-    const float inf = std::numeric_limits<float>::infinity();
-
-    cpptensor::Tensor base(
-        {9},
-        {-2.0f, -2.0f, 0.0f, 0.0f, neg_zero, neg_zero, neg_zero, neg_zero, 4.0f});
-    cpptensor::Tensor exponent(
-        {9},
-        {2.0f, 0.5f, 0.0f, -1.0f, 3.0f, 2.0f, -3.0f, -2.0f, 0.5f});
-    const std::vector<float> expected = {
-        4.0f,
-        nan,
-        1.0f,
-        inf,
-        neg_zero,
-        0.0f,
-        -inf,
-        inf,
-        2.0f,
+    const std::vector<float> bases = {
+        -2.0f, -2.0f, 0.0f, 0.0f, neg_zero, neg_zero, neg_zero, neg_zero, 4.0f, -8.0f
+    };
+    const std::vector<float> exponents = {
+        2.0f, 0.5f, 0.0f, -1.0f, 3.0f, 2.0f, -3.0f, -2.0f, 0.5f, 1.0f / 3.0f
     };
 
-    {
-        ScopedCpuIsaOverride generic_only("generic");
-        require_ieee_data(cpptensor::pow(base, exponent), expected);
+    std::vector<float> expected;
+    expected.reserve(bases.size());
+    for (size_t i = 0; i < bases.size(); ++i) {
+        expected.push_back(expected_pow_domain_semantics(bases[i], exponents[i]));
     }
 
-#ifdef BUILD_AVX2
-    if (cpptensor::has_avx2()) {
-        ScopedCpuIsaOverride avx2_only("avx2");
-        require_ieee_data(cpptensor::pow(base, exponent), expected);
-    }
-#endif
+    cpptensor::Tensor base_tensor({bases.size()}, bases);
+    cpptensor::Tensor exponent_tensor({exponents.size()}, exponents);
+    run_cpu_dispatch_paths([&]() {
+        require_ieee_data(cpptensor::pow(base_tensor, exponent_tensor), expected);
+    });
 }
 
 TEST_CASE("pow preserves real-domain results for negative bases", "[arithmetic][pow]") {

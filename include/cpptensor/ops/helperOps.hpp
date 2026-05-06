@@ -36,6 +36,10 @@ inline const char* deviceTypeName(DeviceType device) {
 }
 
 inline Tensor materialize_for_backend_input(const Tensor& tensor) {
+    // Explicit fallback policy:
+    // backends that are not stride-aware consume contiguous logical layouts.
+    // Contiguous inputs are forwarded zero-copy; non-contiguous views are
+    // materialized into a compact row-major tensor first.
     if (tensor.is_contiguous()) {
         return tensor;
     }

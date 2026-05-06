@@ -5,6 +5,7 @@ This document explains the zero-copy view architecture implementation in cpptens
 ## Table of Contents
 
 - [Overview](#overview)
+- [Tuple-Style Indexing and Slicing](#tuple-style-indexing-and-slicing)
 - [Core Architecture Changes](#core-architecture-changes)
 - [The `base_impl_` Design](#the-base_impl_-design)
 - [Tensor Manipulation Functions](#tensor-manipulation-functions)
@@ -23,6 +24,44 @@ cpptensor implements a **PyTorch-style zero-copy view architecture** for tensor 
 - ✅ **Automatic memory management**: Safe shared ownership via `shared_ptr`
 - ✅ **PyTorch compatibility**: Familiar API and semantics
 - ✅ **Contiguity tracking**: Automatic detection and handling of memory layout
+- ✅ **Explicit fallback policy**: Kernels that are not stride-aware consume logical compact
+  materializations via `contiguous()`/logical flattening rather than raw backing offsets
+
+---
+
+## Tuple-Style Indexing and Slicing
+
+Issue #19 adds a multi-axis indexing API:
+
+```cpp
+Tensor out = x.index({
+    Tensor::SliceSpec{1, 4},         // axis 0 slice
+    -1,                              // axis 1 scalar selection (drops axis)
+    Tensor::SliceSpec{0, 8, 2},      // axis 2 stepped slice
+});
+```
+
+### Supported patterns
+
+- Multiple axes in one call (`index({...})`)
+- Scalar indexing (`int64_t`) with negative indices
+- Slice indexing (`SliceSpec{start, end, step}`) with negative start/end
+- Negative-step slices (`step < 0`)
+
+### Shape behavior
+
+- Scalar axis selection removes that axis from the output shape.
+- Slice axes remain, with length computed from `[start:end:step]`.
+- Selecting scalar indices on every axis returns a rank-0 tensor (`shape() == {}`).
+
+### View vs copy semantics
+
+- **Zero-copy view path**: all axes are scalar or slice with `step > 0`.
+- **Materialized copy path**: any axis uses `step < 0`.
+
+This keeps aliasing behavior predictable:
+- positive-step indexing/slicing aliases source storage,
+- negative-step indexing/slicing produces an independent compact tensor.
 
 ---
 
@@ -57,21 +96,18 @@ TensorImpl(std::shared_ptr<TensorImpl> base,
 - If `new_stride` is empty, computes default row-major strides
 - Sets `base_impl_` to keep base alive via shared ownership
 
-#### Data Delegation
+#### Logical vs Backing Data Access
 
-```cpp
-const std::vector<float>& TensorImpl::data() const { 
-    if (base_impl_) {
-        return base_impl_->data();  // Views delegate to base
-    }
-    return data_;  // Original tensors use their own data
-}
-```
+`cpptensor` now distinguishes **backing storage** from **logical tensor order**:
 
-**Key Insight:**
-- **Views don't store their own data** - they delegate to the base tensor
-- This enables **zero-copy operations**: views and base share the same memory
-- Recursive delegation: views of views work correctly (chains to root)
+- `Tensor::data() const` returns flattened values in logical row-major order.
+  - Owning tensors and full contiguous views expose storage directly.
+  - Non-contiguous/pointer-backed views materialize a compact logical snapshot.
+- `Tensor::data()` (mutable) is intentionally restricted to direct compact backing storage.
+  - Sliced/transposed/permuted/pointer-backed views throw and must be materialized with
+    `contiguous()` or `clone()` before mutable flat-buffer writes.
+
+This preserves correctness for view-based tensors while keeping zero-copy behavior where safe.
 
 ---
 
@@ -178,7 +214,7 @@ Stack:                          Heap:
 **Key Points:**
 1. **Base TensorImpl has reference count = 2** (A and B's view both point to it)
 2. **View's `base_impl_` keeps base alive** via `shared_ptr`
-3. **View's `data_` is EMPTY** - it delegates to base
+3. **View's `data_` is EMPTY** - logical reads use shape/stride/offset over shared backing storage
 
 ---
 
@@ -220,60 +256,28 @@ Stack:                          Heap:
 1. A's `impl_` shared_ptr was destroyed
 2. But reference count only dropped from 2 → 1 (B's view still holds reference via `base_impl_`)
 3. **Data stays alive!** ✅
-4. B can still access data through `base_impl_->data()`
+4. B can still access the same backing storage through `base_impl_`
 
 ---
 
 ### Data Access Flow
 
-Let's trace what happens when you access data from a view:
+For a view tensor, logical indexing is resolved using:
 
-```cpp
-Tensor A({2, 3}, {1, 2, 3, 4, 5, 6});
-Tensor B = A.view({3, 2});
-float val = B.data()[0];  // What happens here?
-```
+1. the shared backing storage pointer (`base_impl_` / `data_ptr_`)
+2. the view's `offset_`
+3. the view's `stride_`
 
-**Call Chain:**
-```cpp
-1. B.data()
-   ↓
-2. B.impl_->data()  // TensorImpl::data()
-   ↓
-3. if (base_impl_) { return base_impl_->data(); }  // View case!
-   ↓
-4. base_impl_->data()  // Call data() on base
-   ↓
-5. if (base_impl_) { ... } else { return data_; }  // Base case!
-   ↓
-6. return data_;  // Returns actual data vector
-```
+For `const data()`:
+- full compact layouts can expose direct storage
+- non-contiguous layouts materialize a compact logical snapshot
 
-**Recursive View Example:**
-```cpp
-Tensor A({2, 3, 4}, ...);
-Tensor B = A.view({6, 4});      // B.base_impl_ = A.impl_
-Tensor C = B.view({24});        // C.base_impl_ = B.impl_
-Tensor D = C.view({3, 8});      // D.base_impl_ = C.impl_
-```
+For mutable `data()`:
+- only direct compact backing storage is allowed
+- non-trivial views throw and require `contiguous()`/`clone()` first
 
-**Chain of Views:**
-```
-D.base_impl_ ──▶ C.impl_
-                 C.base_impl_ ──▶ B.impl_
-                                  B.base_impl_ ──▶ A.impl_
-                                                   A.base_impl_ = null
-                                                   A.data_ = [actual data]
-```
-
-When you call `D.data()`:
-```cpp
-D.data()
-  → D.base_impl_->data()     // C.impl_
-    → C.base_impl_->data()   // B.impl_
-      → B.base_impl_->data() // A.impl_
-        → A.data_            // Finally reaches actual data!
-```
+This is what keeps operations on slices/transposes/from_ptr views correct even when the
+physical backing layout does not match logical tensor order.
 
 ---
 

@@ -16,3 +16,7 @@ as an optional explicit warm-up step.
 `Tensor` now tracks element dtype metadata (`bool`, `int32`, `float32`, `float64`).
 Comparison operators produce `bool` tensors, and dtype is preserved across views,
 clone/contiguous, and factory creation (`zeros`, `ones`, `full`, `randn`).
+
+# checkpoint I/O
+Tensor checkpoints are supported via `Tensor::save(path)` and `Tensor::load(path)`.
+See `docs/TensorSerialization.md` for the versioned binary format and view behavior.
