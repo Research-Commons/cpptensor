@@ -15,8 +15,8 @@
         "BUILD_CUDA": "OFF",
         "USE_STD_SIMD": "OFF",
         "USE_OPENBLAS": "ON",
-        "ENABLE_PROFILING": "OFF",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CPPTENSOR_ENABLE_PROFILING": "OFF"
       }
     },
     {
@@ -25,7 +25,9 @@
       "description": "Default developer build with tests and examples.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CPPTENSOR_BUILD_TESTS": "ON",
+        "CPPTENSOR_BUILD_EXAMPLES": "ON"
       }
     },
     {
@@ -34,7 +36,8 @@
       "description": "Test-focused build used for local and CI test runs.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CPPTENSOR_BUILD_TESTS": "ON"
       }
     },
     {
@@ -55,7 +58,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
-        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined",
+        "CPPTENSOR_BUILD_TESTS": "ON"
       }
     },
     {
@@ -64,7 +68,8 @@
       "description": "Benchmark-friendly optimized build with symbols.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CPPTENSOR_BUILD_BENCHMARKS": "ON"
       }
     },
     {
