@@ -7,6 +7,7 @@ add_executable(cpptensor_test ${TEST_SOURCES})
 
 # Link with main cpptensor lib and Catch2
 target_link_libraries(cpptensor_test PRIVATE cpptensor Catch2::Catch2WithMain)
+cpptensor_apply_build_profile(cpptensor_test)
 cpptensor_apply_build_safety_flags(cpptensor_test)
 
 # Enable test discovery via CTest and Catch2
@@ -16,6 +17,7 @@ catch_discover_tests(cpptensor_test)
 
 add_executable(cpptensor_lazy_init_smoke lazy_init_smoke.cpp)
 target_link_libraries(cpptensor_lazy_init_smoke PRIVATE cpptensor)
+cpptensor_apply_build_profile(cpptensor_lazy_init_smoke)
 cpptensor_apply_build_safety_flags(cpptensor_lazy_init_smoke)
 add_test(NAME cpptensor_lazy_init_smoke COMMAND cpptensor_lazy_init_smoke)
 
