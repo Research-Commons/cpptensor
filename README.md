@@ -97,7 +97,8 @@ throughput on cancellation-heavy inputs:
   `float`.
 - AVX runtime dispatch still uses optimized paths for pointwise and matmul-style
   kernels, but `sum`/`mean` route through the stable reduction implementation.
-- BLAS-backed `dot()` uses a widened accumulation API when available.
+- `dot()` kernels accumulate products in widened precision before casting the
+  scalar result back to `float`.
 
 This trades some peak reduction throughput for better numerical robustness.
 

@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include "cpptensor/tensor/tensor.hpp"
@@ -311,26 +312,34 @@ namespace cpptensor{
 
         double sum = 0.0;
         double compensation = 0.0;
-        for (double value : lane_lo) {
+        auto compensated_add = [&](double value) {
+            if (!std::isfinite(value) || !std::isfinite(sum) || !std::isfinite(compensation)) {
+                sum += value;
+                compensation = 0.0;
+                return;
+            }
+
             const double adjusted = value - compensation;
             const double next = sum + adjusted;
+            if (!std::isfinite(next)) {
+                sum = next;
+                compensation = 0.0;
+                return;
+            }
             compensation = (next - sum) - adjusted;
             sum = next;
+        };
+
+        for (double value : lane_lo) {
+            compensated_add(value);
         }
         for (double value : lane_hi) {
-            const double adjusted = value - compensation;
-            const double next = sum + adjusted;
-            compensation = (next - sum) - adjusted;
-            sum = next;
+            compensated_add(value);
         }
 
         // Remainder
         for (; i < n; ++i) {
-            const double adjusted =
-                (static_cast<double>(a[i]) * static_cast<double>(b[i])) - compensation;
-            const double next = sum + adjusted;
-            compensation = (next - sum) - adjusted;
-            sum = next;
+            compensated_add(static_cast<double>(a[i]) * static_cast<double>(b[i]));
         }
 
         Out.data()[0] = static_cast<float>(sum);

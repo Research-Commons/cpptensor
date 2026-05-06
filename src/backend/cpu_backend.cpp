@@ -9,8 +9,19 @@
 
 namespace {
     inline void kahan_add(double value, double& sum, double& compensation) {
+        if (!std::isfinite(value) || !std::isfinite(sum) || !std::isfinite(compensation)) {
+            sum += value;
+            compensation = 0.0;
+            return;
+        }
+
         const double adjusted = value - compensation;
         const double next = sum + adjusted;
+        if (!std::isfinite(next)) {
+            sum = next;
+            compensation = 0.0;
+            return;
+        }
         compensation = (next - sum) - adjusted;
         sum = next;
     }

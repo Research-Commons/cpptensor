@@ -884,22 +884,53 @@ TEST_CASE("sum mean and dot use numerically safer accumulation on adversarial in
     cpptensor::Tensor tensor({values.size()}, values);
 
     const float naive_sum = naive_sum_f32(values);
-    REQUIRE(std::fabs(naive_sum - expected_sum) > 1000.0f);
+    const float naive_sum_error = std::fabs(naive_sum - expected_sum);
 
     run_cpu_dispatch_paths([&]() {
         require_data(tensor.sum(), {expected_sum});
         require_data(tensor.mean(), {expected_mean});
+
+        const float stable_sum = tensor.sum().data()[0];
+        const float stable_sum_error = std::fabs(stable_sum - expected_sum);
+        REQUIRE(stable_sum_error <= naive_sum_error + 1e-3f);
     });
 
     std::vector<float> ones(values.size(), 1.0f);
     cpptensor::Tensor ones_tensor({ones.size()}, ones);
 
     const float naive_dot = naive_dot_f32(values, ones);
-    REQUIRE(std::fabs(naive_dot - expected_sum) > 1000.0f);
+    const float naive_dot_error = std::fabs(naive_dot - expected_sum);
 
     run_cpu_dispatch_paths([&]() {
-        require_data(cpptensor::dot(tensor, ones_tensor), {expected_sum});
+        const auto stable_dot = cpptensor::dot(tensor, ones_tensor);
+        require_data(stable_dot, {expected_sum});
+        const float stable_dot_error = std::fabs(stable_dot.data()[0] - expected_sum);
+        REQUIRE(stable_dot_error <= naive_dot_error + 1e-3f);
     });
+}
+
+TEST_CASE("stable accumulation preserves non-finite IEEE semantics for sum mean and dot",
+          "[reduction][dot][stability][ieee]") {
+    cpptensor::initialize_kernels();
+
+    const float positive_infinity = std::numeric_limits<float>::infinity();
+    cpptensor::Tensor input({2}, {positive_infinity, 1.0f});
+    cpptensor::Tensor ones({2}, {1.0f, 1.0f});
+
+    auto assert_non_finite_semantics = [&]() {
+        require_ieee_data(input.sum(), {positive_infinity});
+        require_ieee_data(input.mean(), {positive_infinity});
+        require_ieee_data(cpptensor::dot(input, ones), {positive_infinity});
+    };
+
+    run_cpu_dispatch_paths(assert_non_finite_semantics);
+
+#ifdef BUILD_AVX512
+    if (cpptensor::has_avx512f()) {
+        ScopedCpuIsaOverride force_avx512("avx512");
+        assert_non_finite_semantics();
+    }
+#endif
 }
 
 TEST_CASE("non-contiguous view regressions match contiguous baselines",
