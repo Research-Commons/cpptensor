@@ -1,10 +1,12 @@
 #include "cpptensor/ops/comparison/ne.hpp"
 
 #include "cpptensor/ops/comparison/comparison_common.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 namespace cpptensor {
 
 Tensor ne(const Tensor& a, const Tensor& b) {
+    autograd::throw_if_requires_grad(a, b, "comparison");
     return compare_tensors(a, b, std::not_equal_to<float>{});
 }
 

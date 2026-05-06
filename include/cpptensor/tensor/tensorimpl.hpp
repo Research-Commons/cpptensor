@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <functional>
 #include <variant>
 #include <cstdint>
 
@@ -9,7 +10,6 @@
 
 namespace cpptensor {
 
-    class Function; // forward declaration for autograd support
     class Tensor;
 
     /**
@@ -265,27 +265,55 @@ namespace cpptensor {
 
         /**
          * @brief Check if backward pass has been executed
-         *
-         * Used by autograd system to track whether gradients have been
-         * computed for this tensor during backpropagation.
-         *
-         * @return true if backward() has been called, false otherwise
-         *
-         * @note Currently declared but not fully implemented. Part of
-         *       future autograd infrastructure.
          */
         bool has_called_backward() const;
 
-        /**
-         * @brief Set backward execution flag
-         *
-         * Marks whether backward pass has been executed for this tensor.
-         *
-         * @param val true to mark as executed, false otherwise
-         *
-         * @note Part of autograd bookkeeping for preventing duplicate gradients
-         */
         void set_has_called_backward(bool val);
+
+        /**
+         * @brief Autograd requires_grad flag
+         */
+        bool requires_grad() const;
+
+        /**
+         * @brief Set autograd requires_grad flag
+         */
+        void set_requires_grad(bool val);
+
+        /**
+         * @brief Zero the accumulated gradient buffer
+         */
+        void zero_grad();
+
+        /**
+         * @brief Get accumulated gradient buffer
+         */
+        const std::vector<float>& grad_data() const;
+
+        /**
+         * @brief Accumulate gradient into this tensor
+         */
+        void accumulate_grad(const std::vector<float>& grad);
+
+        /**
+         * @brief Propagate gradient through autograd graph
+         */
+        void backward(const std::vector<float>& grad);
+
+        /**
+         * @brief Install backward callback for this tensor
+         */
+        void set_grad_fn(std::function<void(const std::vector<float>&)> fn);
+
+        /**
+         * @brief Remove backward callback
+         */
+        void clear_grad_fn();
+
+        /**
+         * @brief Whether this tensor has a backward callback
+         */
+        bool has_grad_fn() const;
 
         // =============== Shape and Metadata ===============
 
@@ -415,12 +443,24 @@ namespace cpptensor {
         size_t offset_ = 0;
 
         /**
-         * @brief Gradient function for autograd
-         *
-         * Pointer to the operation that created this tensor, used for
-         * automatic differentiation during backward pass.
+         * @brief Backward callback for autograd
          */
-        std::shared_ptr<Function> grad_fn_;
+        std::function<void(const std::vector<float>&)> grad_fn_;
+
+        /**
+         * @brief Accumulated gradient buffer (logical row-major order)
+         */
+        std::vector<float> grad_data_;
+
+        /**
+         * @brief Whether this tensor should participate in autograd
+         */
+        bool requires_grad_ = false;
+
+        /**
+         * @brief Backward bookkeeping flag
+         */
+        bool has_called_backward_ = false;
 
         /**
          * @brief Tensor dimensions

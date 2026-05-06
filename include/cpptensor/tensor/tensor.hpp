@@ -104,6 +104,11 @@ class Tensor {
          */
         Tensor(const std::vector<size_t>& shape,
                const std::vector<float>& values,
+               bool requires_grad,
+               DeviceType device = DeviceType::CPU);
+
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<float>& values,
                DeviceType device = DeviceType::CPU);
         Tensor(const std::vector<size_t>& shape,
                std::initializer_list<float> values,
@@ -170,6 +175,9 @@ class Tensor {
          * ```
          */
         static Tensor zeros(const std::vector<size_t>& shape,
+                            bool requires_grad,
+                            DeviceType device = DeviceType::CPU);
+        static Tensor zeros(const std::vector<size_t>& shape,
                             DeviceType device = DeviceType::CPU,
                             DType dtype = DType::FLOAT32);
 
@@ -185,6 +193,9 @@ class Tensor {
          * Tensor identity_diag = Tensor::ones({100});  // 100-element vector of ones
          * ```
          */
+        static Tensor ones(const std::vector<size_t>& shape,
+                           bool requires_grad,
+                           DeviceType device = DeviceType::CPU);
         static Tensor ones(const std::vector<size_t>& shape,
                            DeviceType device = DeviceType::CPU,
                            DType dtype = DType::FLOAT32);
@@ -205,6 +216,9 @@ class Tensor {
          * ```
          */
         static Tensor randn(const std::vector<size_t>& shape,
+                            bool requires_grad,
+                            DeviceType device = DeviceType::CPU);
+        static Tensor randn(const std::vector<size_t>& shape,
                             DeviceType device = DeviceType::CPU,
                             DType dtype = DType::FLOAT32);
 
@@ -221,6 +235,10 @@ class Tensor {
          * Tensor mask = Tensor::full({10, 10}, -1.0f);  // 10×10 matrix of -1s
          * ```
          */
+        static Tensor full(const std::vector<size_t>& shape,
+                           float value,
+                           bool requires_grad,
+                           DeviceType device = DeviceType::CPU);
         static Tensor full(const std::vector<size_t>& shape,
                            float value,
                            DeviceType device = DeviceType::CPU,
@@ -699,6 +717,38 @@ class Tensor {
          */
         static Tensor load(const std::string& path);
 
+        // =============== Autograd API ===============
+
+        /**
+         * @brief Whether this tensor should track gradients
+         */
+        bool requires_grad() const;
+
+        /**
+         * @brief Enable or disable gradient tracking on this tensor
+         */
+        void set_requires_grad(bool requires_grad);
+
+        /**
+         * @brief Get accumulated gradient as a tensor with matching shape
+         */
+        Tensor grad() const;
+
+        /**
+         * @brief Reset accumulated gradient buffer to zeros
+         */
+        void zero_grad();
+
+        /**
+         * @brief Backpropagate gradients using ones_like as seed
+         */
+        void backward() const;
+
+        /**
+         * @brief Backpropagate with an explicit output gradient
+         */
+        void backward(const Tensor& grad_output) const;
+
         // =============== Reduction Operations ===============
 
         // =============== Reduction Operations ===============
@@ -1044,6 +1094,10 @@ class Tensor {
          * @param value Fill value for all elements
          * @param device Target device
          */
+        Tensor(const std::vector<size_t>& shape,
+               float value,
+               bool requires_grad,
+               DeviceType device = DeviceType::CPU);
         Tensor(const std::vector<size_t>& shape,
                float value,
                DeviceType device = DeviceType::CPU,

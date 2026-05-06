@@ -243,14 +243,39 @@ namespace cpptensor {
             return copied;
         }
 
+        void throw_autograd_unsupported_if_required(const Tensor& tensor, const char* op_name) {
+            if (tensor.requires_grad()) {
+                throw std::runtime_error(
+                    std::string("autograd: operation '") + op_name +
+                    "' is not supported for tensors that require gradients");
+            }
+        }
+
     } // namespace
 
     // ---------- Constructors ----------
     Tensor::Tensor(const std::vector<size_t>& shape,
                    const std::vector<float>& values,
+                   bool requires_grad,
                    DeviceType device)
         : impl_(std::make_shared<TensorImpl>(shape, values, device))
-    {}
+    {
+        impl_->set_requires_grad(requires_grad);
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<float>& values,
+                   DeviceType device)
+        : Tensor(shape, values, false, device) {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   float value,
+                   bool requires_grad,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, value, device))
+    {
+        impl_->set_requires_grad(requires_grad);
+    }
 
     Tensor::Tensor(const std::vector<size_t>& shape,
                    std::initializer_list<float> values,
@@ -391,15 +416,40 @@ namespace cpptensor {
 
     // ---------- Factories ----------
     Tensor Tensor::zeros(const std::vector<size_t>& shape,
+                         bool requires_grad,
+                         DeviceType device) {
+        Tensor out(shape, 0.0f, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::zeros(const std::vector<size_t>& shape,
                          DeviceType device,
                          DType dtype) {
         return Tensor(shape, 0.0f, device, dtype);
     }
 
     Tensor Tensor::ones(const std::vector<size_t>& shape,
+                        bool requires_grad,
+                        DeviceType device) {
+        Tensor out(shape, 1.0f, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::ones(const std::vector<size_t>& shape,
                         DeviceType device,
                         DType dtype) {
         return Tensor(shape, 1.0f, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        float value,
+                        bool requires_grad,
+                        DeviceType device) {
+        Tensor out(shape, value, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
     }
 
     Tensor Tensor::full(const std::vector<size_t>& shape,
@@ -431,10 +481,18 @@ namespace cpptensor {
     }
 
     Tensor Tensor::randn(const std::vector<size_t>& shape,
+                         bool requires_grad,
+                         DeviceType device) {
+        Tensor out = randn(shape, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::randn(const std::vector<size_t>& shape,
                          DeviceType device,
                          DType dtype) {
         size_t total = 1;
-        for (auto s : shape) total *= s;
+        for (auto s_dim : shape) total *= s_dim;
         static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
 
         if (dtype == DType::FLOAT64) {
@@ -591,6 +649,12 @@ namespace cpptensor {
 
         // Create view TensorImpl that shares data with this tensor
         auto view_impl = std::make_shared<TensorImpl>(impl, new_shape);
+        view_impl->set_requires_grad(impl->requires_grad());
+        if (impl->requires_grad()) {
+            view_impl->set_grad_fn([parent = impl](const std::vector<float>& grad) {
+                parent->backward(grad);
+            });
+        }
 
         Tensor result;
         result.impl_ = view_impl;
@@ -598,13 +662,18 @@ namespace cpptensor {
     }
 
     Tensor Tensor::reshape(const std::vector<size_t>& new_shape) const {
-        require_impl(__func__);
+        const auto impl = require_impl(__func__);
         if (is_contiguous()) {
             return view(new_shape);  // Zero-copy if possible
-        } else {
-            // Must copy to make contiguous first
-            return contiguous().view(new_shape);
         }
+
+        if (impl->requires_grad()) {
+            throw std::runtime_error(
+                "autograd: reshape on non-contiguous tensors requiring gradients is not supported");
+        }
+
+        // Must copy to make contiguous first
+        return contiguous().view(new_shape);
     }
 
     Tensor Tensor::flatten(int start_dim, int end_dim) const {
@@ -655,6 +724,7 @@ namespace cpptensor {
                          std::optional<int64_t> end,
                          std::optional<int64_t> step) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "slice");
         const int rank = static_cast<int>(ndim());
 
         int norm_dim = dim;
@@ -811,6 +881,7 @@ namespace cpptensor {
 
     Tensor Tensor::squeeze(int dim) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "squeeze");
         auto sh = shape();
         std::vector<size_t> new_shape;
 
@@ -846,6 +917,7 @@ namespace cpptensor {
 
     Tensor Tensor::unsqueeze(int dim) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "unsqueeze");
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
@@ -872,6 +944,7 @@ namespace cpptensor {
 
     Tensor Tensor::permute(const std::vector<int>& dims) const {
         const auto impl = require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "permute");
         auto old_shape = shape();
         auto old_stride = stride();
         int ndims = static_cast<int>(old_shape.size());
@@ -917,6 +990,7 @@ namespace cpptensor {
 
     Tensor Tensor::transpose(int dim0, int dim1) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "transpose");
         int ndims = static_cast<int>(ndim());
 
         // Default: transpose last two dimensions for 2D case
@@ -963,6 +1037,12 @@ namespace cpptensor {
         if (impl->dtype() == DType::FLOAT32 && impl->can_expose_direct_data_buffer()) {
             return *this;  // Already backed by a direct compact buffer
         }
+
+        if (impl->requires_grad()) {
+            throw std::runtime_error(
+                "autograd: contiguous() materialization for tensors requiring gradients is not supported");
+        }
+
         return clone();
     }
 
@@ -972,32 +1052,98 @@ namespace cpptensor {
         impl->materialize_logical_data_bytes(copied);
         const auto total = numel();
 
+        Tensor out;
         switch (impl->dtype()) {
             case DType::BOOL: {
-                std::vector<bool> out(total, false);
+                std::vector<bool> data(total, false);
                 for (size_t i = 0; i < total; ++i) {
-                    out[i] = copied[i] != 0;
+                    data[i] = copied[i] != 0;
                 }
-                return Tensor(shape(), out, device_type());
+                out = Tensor(shape(), data, device_type());
+                break;
             }
             case DType::INT32: {
-                std::vector<std::int32_t> out(total);
-                std::memcpy(out.data(), copied.data(), total * sizeof(std::int32_t));
-                return Tensor(shape(), out, device_type());
+                std::vector<std::int32_t> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(std::int32_t));
+                out = Tensor(shape(), data, device_type());
+                break;
             }
             case DType::FLOAT32: {
-                std::vector<float> out(total);
-                std::memcpy(out.data(), copied.data(), total * sizeof(float));
-                return Tensor(shape(), out, device_type());
+                std::vector<float> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(float));
+                out = Tensor(shape(), data, device_type());
+                break;
             }
             case DType::FLOAT64: {
-                std::vector<double> out(total);
-                std::memcpy(out.data(), copied.data(), total * sizeof(double));
-                return Tensor(shape(), out, device_type());
+                std::vector<double> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(double));
+                out = Tensor(shape(), data, device_type());
+                break;
             }
         }
 
-        throw std::runtime_error("clone: unsupported dtype");
+        if (impl->requires_grad()) {
+            if (impl->dtype() != DType::FLOAT32) {
+                throw std::runtime_error("autograd: gradient tracking currently requires float32 tensors");
+            }
+            out.set_requires_grad(true);
+            out.impl()->set_grad_fn([parent = impl](const std::vector<float>& grad) {
+                parent->backward(grad);
+            });
+        }
+
+        return out;
+    }
+
+    bool Tensor::requires_grad() const {
+        const auto impl = require_impl(__func__);
+        return impl->requires_grad();
+    }
+
+    void Tensor::set_requires_grad(bool requires_grad) {
+        const auto impl = require_impl(__func__);
+        if (requires_grad && impl->dtype() != DType::FLOAT32) {
+            throw std::runtime_error("autograd: requires_grad currently supports float32 tensors only");
+        }
+        impl->set_requires_grad(requires_grad);
+    }
+
+    Tensor Tensor::grad() const {
+        const auto impl = require_impl(__func__);
+        const auto& grad_data = impl->grad_data();
+        if (grad_data.empty()) {
+            return Tensor::zeros(shape(), false, device_type());
+        }
+        return Tensor(shape(), grad_data, false, device_type());
+    }
+
+    void Tensor::zero_grad() {
+        const auto impl = require_impl(__func__);
+        impl->zero_grad();
+        impl->set_has_called_backward(false);
+    }
+
+    void Tensor::backward() const {
+        const auto impl = require_impl(__func__);
+        if (!impl->requires_grad()) {
+            throw std::runtime_error("autograd: backward() called on a tensor that does not require gradients");
+        }
+
+        std::vector<float> grad_seed(numel(), 1.0f);
+        impl->backward(grad_seed);
+    }
+
+    void Tensor::backward(const Tensor& grad_output) const {
+        const auto impl = require_impl(__func__);
+        if (!impl->requires_grad()) {
+            throw std::runtime_error("autograd: backward() called on a tensor that does not require gradients");
+        }
+
+        if (grad_output.shape() != shape()) {
+            throw std::runtime_error("autograd: grad_output shape must match tensor shape");
+        }
+
+        impl->backward(grad_output.data());
     }
 
     Tensor Tensor::astype(DType target_dtype) const {

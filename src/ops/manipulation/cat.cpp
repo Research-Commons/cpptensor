@@ -1,5 +1,6 @@
 #include "cpptensor/ops/manipulation/cat.hpp"
 #include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 #include <cstring>
 
@@ -121,6 +122,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
 
     for (size_t i = 0; i < tensors.size(); ++i) {
         const auto& t = tensors[i];
+        autograd::throw_if_requires_grad(t, "cat");
         auto t_shape = t.shape();
 
         if (t.device_type() != common_device) {
@@ -167,11 +169,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     size_t offset_in_concat_dim = 0;
 
     for (const auto& t : tensors) {
-        // Copy directly from the logical tensor view. copySlice() handles
-        // offsets for contiguous views and strides for non-contiguous ones.
         copySlice(result, t, concat_dim, offset_in_concat_dim);
-
-        // Move offset forward by this tensor's size in concat dimension.
         offset_in_concat_dim += t.shape()[concat_dim];
     }
 

@@ -3,6 +3,7 @@
 #include "cpptensor/utils/broadcastUtils.hpp"
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/backend/cpu_backend.h"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 #include <stdexcept>
 #include <vector>
@@ -59,6 +60,42 @@ namespace cpptensor {
 
             return Tensor({rows, cols}, compact, tensor.device_type());
         }
+
+        std::vector<float> gemm_grad_a(const std::vector<float>& grad,
+                                       const std::vector<float>& b,
+                                       size_t m,
+                                       size_t k,
+                                       size_t n) {
+            std::vector<float> out(m * k, 0.0f);
+            for (size_t row = 0; row < m; ++row) {
+                for (size_t col = 0; col < k; ++col) {
+                    float acc = 0.0f;
+                    for (size_t j = 0; j < n; ++j) {
+                        acc += grad[row * n + j] * b[col * n + j];
+                    }
+                    out[row * k + col] = acc;
+                }
+            }
+            return out;
+        }
+
+        std::vector<float> gemm_grad_b(const std::vector<float>& grad,
+                                       const std::vector<float>& a,
+                                       size_t m,
+                                       size_t k,
+                                       size_t n) {
+            std::vector<float> out(k * n, 0.0f);
+            for (size_t row = 0; row < k; ++row) {
+                for (size_t col = 0; col < n; ++col) {
+                    float acc = 0.0f;
+                    for (size_t i = 0; i < m; ++i) {
+                        acc += a[i * k + row] * grad[i * n + col];
+                    }
+                    out[row * n + col] = acc;
+                }
+            }
+            return out;
+        }
     }
 
     Tensor matmul(const Tensor& A, const Tensor& B) {
@@ -74,6 +111,11 @@ namespace cpptensor {
 
         const size_t A_ndim = Ash.size();
         const size_t B_ndim = Bsh.size();
+
+        if ((A_ndim > 2 || B_ndim > 2) && (A.requires_grad() || B.requires_grad())) {
+            throw std::runtime_error(
+                "autograd: batched matmul backward is not supported");
+        }
 
         // Case 1: 1D × 1D → dot product
         if (A_ndim == 1 && B_ndim == 1) {
@@ -325,6 +367,41 @@ namespace cpptensor {
         cpptensor::CPU::gemvKernel(A, x, y);
     #endif
 
+        const bool requires_grad = A.requires_grad() || x.requires_grad();
+        y.set_requires_grad(requires_grad);
+        if (!requires_grad) {
+            return y;
+        }
+
+        const auto a_data = A.data();
+        const auto x_data = x.data();
+        const auto a_impl = A.impl();
+        const auto x_impl = x.impl();
+
+        y.impl()->set_grad_fn([a_data, x_data, a_impl, x_impl, M, N](const std::vector<float>& grad_out) {
+            if (a_impl->requires_grad()) {
+                std::vector<float> grad_a(M * N, 0.0f);
+                for (size_t row = 0; row < M; ++row) {
+                    for (size_t col = 0; col < N; ++col) {
+                        grad_a[row * N + col] = grad_out[row] * x_data[col];
+                    }
+                }
+                a_impl->backward(grad_a);
+            }
+
+            if (x_impl->requires_grad()) {
+                std::vector<float> grad_x(N, 0.0f);
+                for (size_t col = 0; col < N; ++col) {
+                    float acc = 0.0f;
+                    for (size_t row = 0; row < M; ++row) {
+                        acc += a_data[row * N + col] * grad_out[row];
+                    }
+                    grad_x[col] = acc;
+                }
+                x_impl->backward(grad_x);
+            }
+        });
+
         return y;
     }
 
@@ -390,6 +467,26 @@ namespace cpptensor {
     #else
         KernelRegistry::instance().getKernel(OpType::Matmul, A.device_type())(A, B, C);
     #endif
+        const bool requires_grad = A.requires_grad() || B.requires_grad();
+        C.set_requires_grad(requires_grad);
+        if (!requires_grad) {
+            return C;
+        }
+
+        const auto a_data = A.data();
+        const auto b_data = B.data();
+        const auto a_impl = A.impl();
+        const auto b_impl = B.impl();
+
+        C.impl()->set_grad_fn([a_data, b_data, a_impl, b_impl, M, K, N](const std::vector<float>& grad_out) {
+            if (a_impl->requires_grad()) {
+                a_impl->backward(gemm_grad_a(grad_out, b_data, M, K, N));
+            }
+            if (b_impl->requires_grad()) {
+                b_impl->backward(gemm_grad_b(grad_out, a_data, M, K, N));
+            }
+        });
+
         return C;
     }
 

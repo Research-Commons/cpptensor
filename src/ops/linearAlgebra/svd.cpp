@@ -1,4 +1,5 @@
 #include "cpptensor/ops/linearAlgebra/svd.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 #include <algorithm>
 #include <string>
@@ -32,6 +33,7 @@ std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
 } // namespace
 
 SVDResult svd(const Tensor& A, bool full_matrices, bool compute_uv) {
+    autograd::throw_if_requires_grad(A, "svd");
     if (A.device_type() != DeviceType::CPU) {
         throw std::runtime_error("svd: only CPU tensors supported");
     }

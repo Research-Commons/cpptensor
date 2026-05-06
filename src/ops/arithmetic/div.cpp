@@ -2,10 +2,12 @@
 
 #include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 
 namespace cpptensor {
 
 Tensor operator/(const Tensor& a, const Tensor& b) {
+    autograd::throw_if_requires_grad(a, b, "div");
     return dispatchBinaryOp(a, b, OpType::Div, CPU::divKernel);
 }
 
