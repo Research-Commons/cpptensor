@@ -3,6 +3,8 @@
 
 #include "cpptensor/tensor/tensor.hpp"
 
+#include <iostream>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -175,4 +177,33 @@ TEST_CASE("repeat materializes tiled tensors from contiguous and view inputs", "
     auto transposed_repeat = transposed.repeat({1, 2});
     REQUIRE(transposed_repeat.shape() == std::vector<size_t>{3, 4});
     require_data(transposed_repeat, {1, 4, 1, 4, 2, 5, 2, 5, 3, 6, 3, 6});
+}
+
+TEST_CASE("printing uses logical layout for non-contiguous views",
+          "[tensor][views][print]") {
+    cpptensor::Tensor base({2, 3}, {1, 2, 3, 4, 5, 6});
+    cpptensor::Tensor transposed = base.transpose();
+
+    std::ostringstream capture;
+    auto* old_buffer = std::cout.rdbuf(capture.rdbuf());
+    struct CoutRestoreGuard {
+        std::streambuf* previous = nullptr;
+        ~CoutRestoreGuard() {
+            std::cout.rdbuf(previous);
+        }
+    } restore{old_buffer};
+
+    transposed.print();
+    const std::string compact_output = capture.str();
+    REQUIRE(compact_output.find("shape=[3, 2]") != std::string::npos);
+    REQUIRE(compact_output.find("values=[1, 4, 2, 5, 3, 6]") != std::string::npos);
+
+    capture.str("");
+    capture.clear();
+
+    transposed.print_pretty();
+    const std::string pretty_output = capture.str();
+    REQUIRE(pretty_output.find("[1, 4]") != std::string::npos);
+    REQUIRE(pretty_output.find("[2, 5]") != std::string::npos);
+    REQUIRE(pretty_output.find("[3, 6]") != std::string::npos);
 }

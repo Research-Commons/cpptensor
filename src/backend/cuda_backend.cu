@@ -3,6 +3,7 @@
 #include <vector>
 #include <iostream>
 #include <stdexcept>
+#include <optional>
 #include <cuda.h>
 #include <cuda_runtime.h>
 
@@ -62,11 +63,42 @@ void mul_kernel_broadcast(const float* a, const float* b, float* out,
 
 
 namespace cpptensor {
+    namespace {
+        const Tensor& prepare_cuda_compact_operand(const Tensor& input, std::optional<Tensor>& materialized) {
+            // Kernel indexing below assumes compact row-major storage.
+            if (!input.is_contiguous()) {
+                materialized = input.contiguous();
+                return *materialized;
+            }
+
+            // Some contiguous views (for example from_ptr-backed tensors) still do not
+            // expose CUDA storage. Probe once and materialize a safe fallback if needed.
+            try {
+                (void)input.impl()->backend_data_ptr(DeviceType::CUDA);
+                return input;
+            } catch (const std::runtime_error&) {
+                materialized = input.contiguous();
+                return *materialized;
+            }
+        }
+    } // namespace
 
     void CUDA::addKernel(const Tensor& A, const Tensor& B, Tensor& out) {
+        if (!out.is_contiguous()) {
+            throw std::runtime_error(
+                "CUDA::addKernel currently requires contiguous output tensors");
+        }
+
+        // Temporary contiguous fallback for non-contiguous CUDA views.
+        // CUDA add/mul kernels below currently assume compact row-major inputs.
+        std::optional<Tensor> a_compact;
+        std::optional<Tensor> b_compact;
+        const Tensor& a_tensor = prepare_cuda_compact_operand(A, a_compact);
+        const Tensor& b_tensor = prepare_cuda_compact_operand(B, b_compact);
+
         // Prepare shapes and strides (same logic as CPU)
-        const auto& a_sh = A.shape();
-        const auto& b_sh = B.shape();
+        const auto& a_sh = a_tensor.shape();
+        const auto& b_sh = b_tensor.shape();
         const auto& out_sh = out.shape();
         int n = static_cast<int>(out_sh.size());
 
@@ -101,8 +133,8 @@ namespace cpptensor {
         for (size_t d : out_sh) total *= d;
         if (total == 0) return;
 
-        const float* d_a = A.impl()->backend_data_ptr(DeviceType::CUDA);
-        const float* d_b = B.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_a = a_tensor.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_b = b_tensor.impl()->backend_data_ptr(DeviceType::CUDA);
         float* d_out = out.impl()->backend_data_ptr(DeviceType::CUDA);
         size_t *d_strideA_eff = nullptr, *d_strideB_eff = nullptr, *d_strideOut = nullptr, *d_out_sh = nullptr;
 
@@ -133,9 +165,21 @@ namespace cpptensor {
     }
 
     void CUDA::mulKernel(const Tensor& A, const Tensor& B, Tensor& out) {
+        if (!out.is_contiguous()) {
+            throw std::runtime_error(
+                "CUDA::mulKernel currently requires contiguous output tensors");
+        }
+
+        // Temporary contiguous fallback for non-contiguous CUDA views.
+        // CUDA add/mul kernels below currently assume compact row-major inputs.
+        std::optional<Tensor> a_compact;
+        std::optional<Tensor> b_compact;
+        const Tensor& a_tensor = prepare_cuda_compact_operand(A, a_compact);
+        const Tensor& b_tensor = prepare_cuda_compact_operand(B, b_compact);
+
         // Prepare shapes and strides (same logic as CPU)
-        const auto& a_sh = A.shape();
-        const auto& b_sh = B.shape();
+        const auto& a_sh = a_tensor.shape();
+        const auto& b_sh = b_tensor.shape();
         const auto& out_sh = out.shape();
         int n = static_cast<int>(out_sh.size());
 
@@ -170,8 +214,8 @@ namespace cpptensor {
         for (size_t d : out_sh) total *= d;
         if (total == 0) return;
 
-        const float* d_a = A.impl()->backend_data_ptr(DeviceType::CUDA);
-        const float* d_b = B.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_a = a_tensor.impl()->backend_data_ptr(DeviceType::CUDA);
+        const float* d_b = b_tensor.impl()->backend_data_ptr(DeviceType::CUDA);
         float* d_out = out.impl()->backend_data_ptr(DeviceType::CUDA);
         size_t *d_strideA_eff = nullptr, *d_strideB_eff = nullptr, *d_strideOut = nullptr, *d_out_sh = nullptr;
 
