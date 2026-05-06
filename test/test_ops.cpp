@@ -290,6 +290,22 @@ float expected_pow_domain_semantics(float base, float exponent) {
     return std::pow(base, exponent);
 }
 
+float naive_sum_f32(const std::vector<float>& values) {
+    float total = 0.0f;
+    for (float value : values) {
+        total += value;
+    }
+    return total;
+}
+
+float naive_dot_f32(const std::vector<float>& lhs, const std::vector<float>& rhs) {
+    float total = 0.0f;
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        total += lhs[i] * rhs[i];
+    }
+    return total;
+}
+
 void require_broadcast_arithmetic_results() {
     cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor row({1, 3}, {10, 20, 30});
@@ -395,6 +411,18 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::cat({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 4});
+    require_data(cuda_from_view, {
+        0, 3, 0, 3,
+        1, 4, 1, 4,
+        2, 5, 2, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
@@ -570,6 +598,18 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::stack({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 2, 2});
+    require_data(cuda_from_view, {
+        0, 0, 3, 3,
+        1, 1, 4, 4,
+        2, 2, 5, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
@@ -791,6 +831,38 @@ TEST_CASE("linear algebra kernels honor logical tensor views", "[linear-algebra]
     }
 }
 
+TEST_CASE("sum, mean, and dot improve cancellation-heavy accumulation accuracy",
+          "[numerics][stability]") {
+    cpptensor::initialize_kernels();
+
+    SECTION("small cancellation pattern preserves low-order terms") {
+        cpptensor::Tensor values({4}, {1.0e8f, 1.0f, -1.0e8f, 1.0f});
+        cpptensor::Tensor ones({4}, {1.0f, 1.0f, 1.0f, 1.0f});
+
+        require_data(values.sum(), {2.0f});
+        require_data(values.mean(), {0.5f});
+        require_data(cpptensor::dot(values, ones), {2.0f});
+    }
+
+    SECTION("long adversarial vectors retain accumulated unit contributions") {
+        constexpr size_t triplets = 4096;
+        std::vector<float> values;
+        values.reserve(triplets * 3);
+        for (size_t i = 0; i < triplets; ++i) {
+            values.push_back(1.0e8f);
+            values.push_back(1.0f);
+            values.push_back(-1.0e8f);
+        }
+
+        cpptensor::Tensor vector({values.size()}, values);
+        cpptensor::Tensor ones({values.size()}, std::vector<float>(values.size(), 1.0f));
+
+        require_data(vector.sum(), {static_cast<float>(triplets)});
+        require_data(vector.mean(), {1.0f / 3.0f});
+        require_data(cpptensor::dot(vector, ones), {static_cast<float>(triplets)});
+    }
+}
+
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
     cpptensor::initialize_kernels();
 
@@ -847,6 +919,128 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.max(0), {4, 5, 6});
     require_shape(t.min(-1), {2});
     require_data(t.min(-1), {1, 4});
+}
+
+TEST_CASE("sum mean and dot use numerically safer accumulation on adversarial inputs",
+          "[reduction][dot][stability]") {
+    cpptensor::initialize_kernels();
+
+    constexpr size_t repeats = 4096;
+    std::vector<float> values;
+    values.reserve(repeats * 3);
+    for (size_t i = 0; i < repeats; ++i) {
+        values.push_back(100000000.0f);
+        values.push_back(1.0f);
+        values.push_back(-100000000.0f);
+    }
+
+    const float expected_sum = static_cast<float>(repeats);
+    const float expected_mean = expected_sum / static_cast<float>(values.size());
+
+    cpptensor::Tensor tensor({values.size()}, values);
+
+    const float naive_sum = naive_sum_f32(values);
+    const float naive_sum_error = std::fabs(naive_sum - expected_sum);
+
+    run_cpu_dispatch_paths([&]() {
+        require_data(tensor.sum(), {expected_sum});
+        require_data(tensor.mean(), {expected_mean});
+
+        const float stable_sum = tensor.sum().data()[0];
+        const float stable_sum_error = std::fabs(stable_sum - expected_sum);
+        REQUIRE(stable_sum_error <= naive_sum_error + 1e-3f);
+    });
+
+    std::vector<float> ones(values.size(), 1.0f);
+    cpptensor::Tensor ones_tensor({ones.size()}, ones);
+
+    const float naive_dot = naive_dot_f32(values, ones);
+    const float naive_dot_error = std::fabs(naive_dot - expected_sum);
+
+    run_cpu_dispatch_paths([&]() {
+        const auto stable_dot = cpptensor::dot(tensor, ones_tensor);
+        require_data(stable_dot, {expected_sum});
+        const float stable_dot_error = std::fabs(stable_dot.data()[0] - expected_sum);
+        REQUIRE(stable_dot_error <= naive_dot_error + 1e-3f);
+    });
+}
+
+TEST_CASE("stable accumulation preserves non-finite IEEE semantics for sum mean and dot",
+          "[reduction][dot][stability][ieee]") {
+    cpptensor::initialize_kernels();
+
+    const float positive_infinity = std::numeric_limits<float>::infinity();
+    cpptensor::Tensor input({2}, {positive_infinity, 1.0f});
+    cpptensor::Tensor ones({2}, {1.0f, 1.0f});
+
+    auto assert_non_finite_semantics = [&]() {
+        require_ieee_data(input.sum(), {positive_infinity});
+        require_ieee_data(input.mean(), {positive_infinity});
+        require_ieee_data(cpptensor::dot(input, ones), {positive_infinity});
+    };
+
+    run_cpu_dispatch_paths(assert_non_finite_semantics);
+
+#ifdef BUILD_AVX512
+    if (cpptensor::has_avx512f()) {
+        ScopedCpuIsaOverride force_avx512("avx512");
+        assert_non_finite_semantics();
+    }
+#endif
+}
+
+TEST_CASE("non-contiguous view regressions match contiguous baselines",
+          "[ops][views][regression]") {
+    cpptensor::Tensor matrix({3, 4}, {
+        1, 2, 3, 4,
+        5, 6, 7, 8,
+        9, 10, 11, 12
+    });
+
+    SECTION("slice sum matches contiguous baseline") {
+        auto sliced = matrix.slice(1, 0, 4, 2);
+        REQUIRE_FALSE(sliced.is_contiguous());
+
+        auto baseline = sliced.contiguous();
+        auto sliced_sum = sliced.sum(0);
+        auto baseline_sum = baseline.sum(0);
+
+        require_shape(sliced_sum, baseline_sum.shape());
+        require_data(sliced_sum, baseline_sum.data());
+    }
+
+    SECTION("transpose clone preserves logical order") {
+        auto transposed = matrix.transpose();
+        auto cloned = transposed.clone();
+        auto baseline = transposed.contiguous();
+
+        require_shape(cloned, baseline.shape());
+        require_data(cloned, baseline.data());
+    }
+
+    SECTION("chained views stay layout-correct across unary and reductions") {
+        auto chained = matrix.transpose().slice(0, 1, 4).slice(1, 0, 3, 2);
+        REQUIRE_FALSE(chained.is_contiguous());
+
+        auto baseline = chained.contiguous();
+        require_data(cpptensor::exp(chained), cpptensor::exp(baseline).data());
+        require_data(chained.sum(1), baseline.sum(1).data());
+    }
+
+    SECTION("from_ptr-backed views match contiguous baselines") {
+        cpptensor::Tensor owner({8}, {0, 1, 2, 3, 4, 5, 6, 7});
+        auto from_ptr_view = cpptensor::Tensor::from_ptr(
+            {6},
+            owner.data().data() + 1,
+            owner.impl(),
+            owner.device_type());
+        auto stepped = from_ptr_view.slice(0, 0, 6, 2);
+        REQUIRE_FALSE(stepped.is_contiguous());
+
+        auto baseline = stepped.contiguous();
+        require_data(-stepped, (-baseline).data());
+        require_data(stepped.sum(0), baseline.sum(0).data());
+    }
 }
 
 TEST_CASE("contiguous materializes view values from the logical view start", "[tensor][contiguous]") {
@@ -1138,7 +1332,9 @@ TEST_CASE("AVX2 pow handles SIMD chunks and scalar tails for negative bases", "[
     }
 
     cpptensor::Tensor base({9}, {-1, -2, -3, -4, -5, -6, -7, -8, -9});
-    cpptensor::Tensor exponents({9}, {2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
+    cpptensor::Tensor exponents(
+        {9},
+        std::vector<float>{2, 3, 2, 3, 0.5f, 2, 3, 0.5f, 2});
     cpptensor::Tensor out = cpptensor::Tensor::full({9}, 0.0f);
 
     cpptensor::AVX2::pow_f32_avx2(base, exponents, out);
