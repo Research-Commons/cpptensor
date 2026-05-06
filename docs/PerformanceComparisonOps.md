@@ -766,11 +766,11 @@ conda run -n cpptensor python3 benchmarks/benchmark_harness.py \
 
 This writes:
 
-- `benchmark_results/<timestamp>/benchmark_results.json`  
+- `benchmark_results/<timestamp>/benchmark_results.json`
   Consolidated run data for all executed backends.
-- `benchmark_results/<timestamp>/benchmark_results.csv`  
+- `benchmark_results/<timestamp>/benchmark_results.csv`
   Flat table suitable for spreadsheet/database ingestion.
-- `benchmark_results/latest.json` and `benchmark_results/latest.csv`  
+- `benchmark_results/latest.json` and `benchmark_results/latest.csv`
   Convenience pointers to the newest run.
 
 Each JSON run captures:
