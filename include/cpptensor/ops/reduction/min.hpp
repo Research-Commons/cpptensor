@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cpptensor/tensor/tensor.hpp"
+#include <optional>
 
 namespace cpptensor {
 
@@ -11,7 +12,7 @@ namespace cpptensor {
      * tensor or along a specific dimension.
      *
      * @param input Input tensor
-     * @param dim Dimension along which to compute min (-1 for all elements)
+     * @param dim Dimension along which to compute min (nullopt = all elements)
      * @param keepdim If true, output has same number of dimensions as input
      * @return Tensor containing minimum values
      *
@@ -23,6 +24,8 @@ namespace cpptensor {
      * Tensor min_dim0_keep = min(A, 0, true); // Min along dim 0, shape: (1, 4)
      * ```
      */
-    Tensor min(const Tensor& input, int dim = -1, bool keepdim = false);
+    Tensor min(const Tensor& input,
+               std::optional<int> dim = std::nullopt,
+               bool keepdim = false);
 
 } // namespace cpptensor

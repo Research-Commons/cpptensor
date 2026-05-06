@@ -21,6 +21,7 @@ foreach(file ${EXAMPLE_SOURCES})
     # Build one executable per example file
     add_executable(${example} ${file})
     target_link_libraries(${example} PRIVATE cpptensor)
+    cpptensor_apply_build_safety_flags(${example})
 
     # Ensure debug symbols and frame pointers for profiling accuracy
     target_compile_options(${example} PRIVATE -g -fno-omit-frame-pointer -O2)

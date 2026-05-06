@@ -68,8 +68,10 @@ namespace cpptensor {
             R.registerUnaryKernel(OpType::Relu, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::relu_f32_avx2);
 
             // AVX2 Reduction operations
-            R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::sum_f32_avx2);
-            R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::mean_f32_avx2);
+            // Numerically stable accumulation policy: route sum/mean through the
+            // widened generic kernel even under AVX runtime dispatch.
+            R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX2, CPU::sumKernel);
+            R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX2, CPU::meanKernel);
             R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::max_f32_avx2);
             R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX2, cpptensor::AVX2::min_f32_avx2);
 
@@ -89,8 +91,10 @@ namespace cpptensor {
             R.registerKernel(OpType::Dot,    DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::dot_f32_avx512);
 
             // AVX-512 Reduction operations
-            R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::sum_f32_avx512);
-            R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::mean_f32_avx512);
+            // Numerically stable accumulation policy: route sum/mean through the
+            // widened generic kernel even under AVX runtime dispatch.
+            R.registerReductionKernel(OpType::Sum, DeviceType::CPU, CpuIsa::AVX512, CPU::sumKernel);
+            R.registerReductionKernel(OpType::Mean, DeviceType::CPU, CpuIsa::AVX512, CPU::meanKernel);
             R.registerReductionKernel(OpType::Max, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::max_f32_avx512);
             R.registerReductionKernel(OpType::Min, DeviceType::CPU, CpuIsa::AVX512, cpptensor::AVX512::min_f32_avx512);
     #endif

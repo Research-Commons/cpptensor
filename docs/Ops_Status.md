@@ -140,8 +140,12 @@ Regression coverage for these contracts lives in `test/test_ops.cpp` (table-driv
 - Reduce specific dimension: `A.sum(0)`, `A.sum(1)`, etc.
 - Keep dimension: `A.sum(1, keepdim=true)` preserves shape
 - Negative indexing: `A.sum(-1)` for last dimension
+- **0-D scalar contract:** true scalars use `shape == {}` and `ndim() == 0`
+  across reductions and shape ops (`view`, `squeeze`, `unsqueeze`, `print`)
 - Full test coverage: 2D and 3D tensors validated
 - **AVX2/AVX512 SIMD optimizations**: Vectorized implementations for max/min operations
+- **Numerical stability upgrade**: `sum()` and `mean()` use compensated/wider accumulation paths, and `dot()` routes through `KernelRegistry` CPU/AVX2/AVX512 kernels with wider accumulation to reduce cancellation error on long or adversarial inputs.
+- **Trade-off**: these stability-oriented paths can be modestly slower than pure FP32/SIMD accumulation, while optimized SIMD fast paths remain in place for operations that are not accumulation-sensitive (for example `max()`/`min()`).
 - Performance: CPU baseline + highly optimized AVX2/AVX512 kernels
 
 **Usage:**

@@ -3,6 +3,8 @@
 #include <memory>
 #include <stdexcept>
 #include <functional>
+#include <variant>
+#include <cstdint>
 
 #include "cpptensor/enums/dispatcherEnum.h"
 
@@ -77,6 +79,15 @@ namespace cpptensor {
         TensorImpl(const std::vector<size_t>& shape,
                    const std::vector<float>& data,
                    DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<double>& data,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<std::int32_t>& data,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<bool>& data,
+                   DeviceType device = DeviceType::CPU);
 
         /**
          * @brief Construct TensorImpl filled with a constant value
@@ -97,6 +108,15 @@ namespace cpptensor {
          */
         TensorImpl(const std::vector<size_t>& shape,
                    float fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   double fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   std::int32_t fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   bool fill_value,
                    DeviceType device = DeviceType::CPU);
 
         /**
@@ -131,7 +151,8 @@ namespace cpptensor {
         TensorImpl(const std::vector<size_t>& shape,
                    float* data_ptr,
                    std::shared_ptr<TensorImpl> owner,
-                   DeviceType device = DeviceType::CPU);
+                   DeviceType device = DeviceType::CPU,
+                   DType dtype = DType::FLOAT32);
 
         // =============== Data Accessors ===============
 
@@ -179,6 +200,12 @@ namespace cpptensor {
          * @return Mutable pointer to data
          */
         float* data_ptr();
+
+        /**
+         * @brief Get raw element pointer with dtype-aware storage
+         */
+        const void* raw_data_ptr() const;
+        void* raw_data_ptr();
 
         /**
          * @brief Get const reference to stride information
@@ -309,6 +336,11 @@ namespace cpptensor {
         DeviceType device() const;
 
         /**
+         * @brief Get tensor element datatype
+         */
+        DType dtype() const;
+
+        /**
          * @brief Set device for tensor storage
          *
          * Changes the device type. Note: This does NOT actually move data.
@@ -331,11 +363,20 @@ namespace cpptensor {
          * @brief Materialize logical row-major contents into a compact buffer
          */
         void materialize_logical_data(std::vector<float>& out) const;
+        void materialize_logical_data_bytes(std::vector<std::uint8_t>& out) const;
+        std::size_t element_size_bytes() const;
+        bool is_pointer_backed_view() const;
 
         /**
-         * @brief Raw data buffer in row-major order
+         * @brief Typed storage payload (bool uses uint8_t values 0/1)
          */
-        std::vector<float> data_;
+        using Storage = std::variant<
+            std::vector<std::uint8_t>, // BOOL
+            std::vector<std::int32_t>, // INT32
+            std::vector<float>,        // FLOAT32
+            std::vector<double>        // FLOAT64
+        >;
+        Storage storage_;
 
         /**
          * @brief Cached compact logical contents for const data() on views
@@ -405,6 +446,7 @@ namespace cpptensor {
          * @brief Device where tensor is stored (CPU, CUDA, etc.)
          */
         DeviceType device_ = DeviceType::CPU;
+        DType dtype_ = DType::FLOAT32;
 
         /**
          * @brief Compute strides from shape (row-major layout)

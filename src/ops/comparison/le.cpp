@@ -1,22 +1,21 @@
 #include "cpptensor/ops/comparison/le.hpp"
 
-#include "cpptensor/backend/cpu_backend.h"
-#include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/ops/comparison/comparison_common.hpp"
 #include "cpptensor/tensor/autograd_utils.hpp"
 
 namespace cpptensor {
 
 Tensor le(const Tensor& a, const Tensor& b) {
     autograd::throw_if_requires_grad(a, b, "comparison");
-    return dispatchBinaryOp(a, b, OpType::Le, CPU::leKernel);
+    return compare_tensors(a, b, std::less_equal<float>{});
 }
 
 Tensor le(const Tensor& a, float scalar) {
-    return le(a, Tensor::full(a.shape(), scalar, a.device_type()));
+    return le(a, Tensor::full(a.shape(), scalar, a.device_type(), a.dtype()));
 }
 
 Tensor le(float scalar, const Tensor& b) {
-    return le(Tensor::full(b.shape(), scalar, b.device_type()), b);
+    return le(Tensor::full(b.shape(), scalar, b.device_type(), b.dtype()), b);
 }
 
 Tensor operator<=(const Tensor& a, const Tensor& b) {
