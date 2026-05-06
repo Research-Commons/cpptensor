@@ -23,6 +23,7 @@ namespace cpptensor {
             return tensor.impl()->data_ptr();
         }
 
+#ifdef USE_OPENBLAS
         Tensor compact_blas_input(const Tensor& tensor) {
             return tensor.is_contiguous() ? tensor : tensor.contiguous();
         }
@@ -36,6 +37,7 @@ namespace cpptensor {
             const auto& stride = tensor.stride();
             return stride.size() == 2 && stride[0] == 1 && stride[1] == shape[0];
         }
+#endif
 
         Tensor make_batched_matrix_view(const Tensor& tensor, size_t base_offset) {
             const auto shape = tensor.shape();

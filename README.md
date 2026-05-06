@@ -130,6 +130,17 @@ Notes:
 - Sanitizers currently support GCC/Clang-style toolchains.
 - `CPPTENSOR_ENABLE_ASAN` and `CPPTENSOR_ENABLE_TSAN` are mutually exclusive.
 - Sanitizer mode currently requires `BUILD_CUDA=OFF`.
+- Warning policy is compiler-specific and scoped to cpptensor-owned targets only (`cpptensor`, ISA object libs, tests/examples/benchmarks we define):
+  - GCC/Clang/AppleClang: `-Wall -Wextra -Wpedantic -Wformat=2 -Wnull-dereference -Wnon-virtual-dtor`
+  - MSVC: `/W4 /permissive-`
+  - If `CPPTENSOR_WARNINGS_AS_ERRORS=ON`, `/WX` or `-Werror` is added for the same scoped targets.
+
+CI note:
+
+- `.github/workflows/ci.yml` includes a `sanitizer-warning-gate` job that configures
+  `CPPTENSOR_ENABLE_ASAN=ON`, `CPPTENSOR_ENABLE_UBSAN=ON`,
+  `CPPTENSOR_ENABLE_STRICT_WARNINGS=ON`, and `CPPTENSOR_WARNINGS_AS_ERRORS=ON`,
+  then runs the full CTest suite.
 
 Example sanitizer workflow:
 

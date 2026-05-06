@@ -12,6 +12,7 @@
 namespace cpptensor {
 namespace {
 
+#ifdef USE_OPENBLAS
 std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
     const auto& shape = matrix.shape();
     const auto& stride = matrix.stride();
@@ -28,6 +29,7 @@ std::vector<float> copy_matrix_to_row_major_buffer(const Tensor& matrix) {
     }
     return buffer;
 }
+#endif
 
 } // namespace
 
@@ -92,6 +94,7 @@ EigResult eig_symmetric(const Tensor& A, bool compute_eigenvectors) {
     return result;
 
 #else
+    (void)compute_eigenvectors;
     // ===== No LAPACK Available =====
     throw std::runtime_error(
         "eig_symmetric: requires OpenBLAS/LAPACK library.\n"
@@ -171,6 +174,7 @@ EigResult eig(const Tensor& A, bool compute_eigenvectors) {
     return result;
 
 #else
+    (void)compute_eigenvectors;
     // ===== No LAPACK Available =====
     throw std::runtime_error(
         "eig: requires OpenBLAS/LAPACK library.\n"

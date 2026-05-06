@@ -471,16 +471,15 @@ namespace cpptensor {
             return;
         }
 
-        auto& host = const_cast<std::vector<float>&>(std::get<std::vector<float>>(storage_));
-        const size_t total = numel();
-        const size_t bytes = total * sizeof(float);
-
         if (dev == DeviceType::CPU) {
             if (host_data_valid_) {
                 return;
             }
 
 #ifdef BUILD_CUDA
+            auto& host = const_cast<std::vector<float>&>(std::get<std::vector<float>>(storage_));
+            const size_t total = numel();
+            const size_t bytes = total * sizeof(float);
             if (total != 0) {
                 cuda_check(cudaMemcpy(host.data(), cuda_data_, bytes, cudaMemcpyDeviceToHost),
                            "device-to-host copy");
@@ -493,6 +492,9 @@ namespace cpptensor {
         }
 
 #ifdef BUILD_CUDA
+        auto& host = const_cast<std::vector<float>&>(std::get<std::vector<float>>(storage_));
+        const size_t total = numel();
+        const size_t bytes = total * sizeof(float);
         if (cuda_data_valid_) {
             return;
         }
