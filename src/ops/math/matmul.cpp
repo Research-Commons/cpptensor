@@ -18,10 +18,6 @@ namespace cpptensor {
     // =============== Helper Functions for Optimization ===============
 
     namespace {
-        const float* raw_data(const Tensor& tensor) {
-            return tensor.impl()->data_ptr();
-        }
-
         float* raw_data(Tensor& tensor) {
             return tensor.impl()->data_ptr();
         }
