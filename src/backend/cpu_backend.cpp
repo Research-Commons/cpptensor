@@ -1,11 +1,29 @@
 #include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <experimental/simd>
 
 //Need to fix these ( reduce so much repetitions. dont care that much rn as its just basic C++ kernels not even being called mostly)
+
+namespace {
+    inline void compensated_add(double value, double& sum, double& compensation) {
+        // Neumaier summation improves stability when magnitudes differ sharply.
+        const double t = sum + value;
+        if (std::abs(sum) >= std::abs(value)) {
+            compensation += (sum - t) + value;
+        } else {
+            compensation += (value - t) + sum;
+        }
+        sum = t;
+    }
+
+    inline float finalize_compensated_sum(double sum, double compensation) {
+        return static_cast<float>(sum + compensation);
+    }
+}
 
 void cpptensor::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
     const auto& a_sh = A.shape();
@@ -511,12 +529,17 @@ void cpptensor::CPU::dotKernel(const Tensor &A, const Tensor &B, Tensor &Out) {
     const float *a_data = A.data().data();
     const float *b_data = B.data().data();
 
-    float result = 0.0f;
+    double result = 0.0;
+    double compensation = 0.0;
     for (size_t i = 0; i < n; ++i) {
-        result += a_data[i] * b_data[i];
+        compensated_add(
+            static_cast<double>(a_data[i]) * static_cast<double>(b_data[i]),
+            result,
+            compensation
+        );
     }
 
-    Out.data()[0] = result;
+    Out.data()[0] = finalize_compensated_sum(result, compensation);
 }
 
 // =============== Reduction Operations ===============
@@ -558,12 +581,13 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
 
     // Case 1: Sum all elements (dim = -1)
     if (dim < 0) {
-        float sum = 0.0f;
+        double sum = 0.0;
+        double compensation = 0.0;
         const size_t total = input.numel();
         for (size_t i = 0; i < total; ++i) {
-            sum += in_data[i];
+            compensated_add(static_cast<double>(in_data[i]), sum, compensation);
         }
-        out_data[0] = sum;
+        out_data[0] = finalize_compensated_sum(sum, compensation);
         return;
     }
 
@@ -587,11 +611,10 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
         inner *= in_shape[i];
     }
 
-    // Zero initialize output
+    // Use compensated accumulators per output slot for cancellation-heavy inputs.
     const size_t out_total = outer * inner;
-    for (size_t i = 0; i < out_total; ++i) {
-        out_data[i] = 0.0f;
-    }
+    std::vector<double> sums(out_total, 0.0);
+    std::vector<double> compensations(out_total, 0.0);
 
     // Accumulate: for each position in input, add to corresponding output position
     // Input layout: [outer, reduce, inner]
@@ -601,9 +624,17 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
             for (size_t i = 0; i < inner; ++i) {
                 size_t in_idx = (o * reduce + r) * inner + i;
                 size_t out_idx = o * inner + i;
-                out_data[out_idx] += in_data[in_idx];
+                compensated_add(
+                    static_cast<double>(in_data[in_idx]),
+                    sums[out_idx],
+                    compensations[out_idx]
+                );
             }
         }
+    }
+
+    for (size_t i = 0; i < out_total; ++i) {
+        out_data[i] = finalize_compensated_sum(sums[i], compensations[i]);
     }
 }
 
