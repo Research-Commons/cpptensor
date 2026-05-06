@@ -61,3 +61,75 @@ TEST_CASE("full contiguous views still expose shared mutable storage", "[tensor]
     REQUIRE(base.data()[0] == Approx(42.0f));
     require_data(reshaped, {42, 1, 2, 3});
 }
+
+TEST_CASE("tuple-style indexing supports multi-axis slice and scalar selection",
+          "[tensor][views][index]") {
+    cpptensor::Tensor base(
+        {2, 3, 4},
+        {0, 1, 2, 3,
+         4, 5, 6, 7,
+         8, 9, 10, 11,
+         12, 13, 14, 15,
+         16, 17, 18, 19,
+         20, 21, 22, 23});
+
+    cpptensor::Tensor indexed = base.index({
+        cpptensor::Tensor::SliceSpec{0, 2},
+        -2,
+        cpptensor::Tensor::SliceSpec{1, 4, 2},
+    });
+
+    REQUIRE(indexed.shape() == std::vector<size_t>{2, 2});
+    require_data(indexed, {5, 7, 17, 19});
+
+    base.data()[5] = 55.0f;
+    require_data(indexed, {55, 7, 17, 19});
+    REQUIRE_THROWS(indexed.data());
+}
+
+TEST_CASE("negative-step slicing is supported", "[tensor][views][slice]") {
+    cpptensor::Tensor base({6}, {0, 1, 2, 3, 4, 5});
+    cpptensor::Tensor reversed = base.slice(0, std::nullopt, std::nullopt, -1);
+
+    REQUIRE(reversed.shape() == std::vector<size_t>{6});
+    require_data(reversed, {5, 4, 3, 2, 1, 0});
+
+    base.data()[0] = 123.0f;
+    require_data(reversed, {5, 4, 3, 2, 1, 0});
+}
+
+TEST_CASE("scalar indexing reduces dimensions and supports negative indices",
+          "[tensor][views][index]") {
+    cpptensor::Tensor base({2, 3}, {0, 1, 2, 3, 4, 5});
+    cpptensor::Tensor scalar = base.index({-1, -2});
+
+    REQUIRE(scalar.shape().empty());
+    const auto& scalar_data = std::as_const(scalar).data();
+    REQUIRE(scalar_data.size() == 1);
+    REQUIRE(scalar_data[0] == Approx(4.0f));
+
+    base.data()[4] = 42.0f;
+    REQUIRE(std::as_const(scalar).data()[0] == Approx(42.0f));
+    REQUIRE_THROWS(scalar.data());
+}
+
+TEST_CASE("slice plus transpose remains correct with tuple-style indexing",
+          "[tensor][views][index][transpose]") {
+    cpptensor::Tensor base(
+        {3, 4},
+        {0, 1, 2, 3,
+         4, 5, 6, 7,
+         8, 9, 10, 11});
+
+    cpptensor::Tensor sliced = base.index({
+        cpptensor::Tensor::SliceSpec{1, 3},
+        cpptensor::Tensor::SliceSpec{0, 4, 2},
+    });
+    cpptensor::Tensor transposed = sliced.transpose();
+
+    REQUIRE(sliced.shape() == std::vector<size_t>{2, 2});
+    require_data(sliced, {4, 6, 8, 10});
+
+    REQUIRE(transposed.shape() == std::vector<size_t>{2, 2});
+    require_data(transposed, {4, 8, 6, 10});
+}

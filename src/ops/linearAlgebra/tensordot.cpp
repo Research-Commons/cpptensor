@@ -1,5 +1,6 @@
 #include "cpptensor/ops/linearAlgebra/tensordot.hpp"
 #include "cpptensor/ops/math/matmul.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <numeric>
@@ -142,6 +143,7 @@ namespace cpptensor {
     }
 
     Tensor tensordot(const Tensor& A, const Tensor& B, const std::vector<int>& axesA_in, const std::vector<int>& axesB_in) {
+        autograd::throw_if_requires_grad(A, B, "tensordot");
         if (A.device_type() != B.device_type())
             throw std::runtime_error("tensordot: device mismatch");
 

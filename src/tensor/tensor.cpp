@@ -12,6 +12,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <cstring>
 #include <array>
 #include <fstream>
 #include <limits>
@@ -114,6 +115,98 @@ namespace cpptensor {
             return a * b;
         }
 
+        struct NormalizedSlice {
+            int64_t start = 0;
+            int64_t stop = 0;
+            int64_t step = 1;
+            size_t length = 0;
+        };
+
+        int64_t normalize_scalar_index(int64_t index,
+                                       int64_t dim_size,
+                                       const char* op_name) {
+            int64_t normalized = index;
+            if (normalized < 0) {
+                normalized += dim_size;
+            }
+
+            if (normalized < 0 || normalized >= dim_size) {
+                throw std::runtime_error(std::string(op_name) + ": scalar index " +
+                                         std::to_string(index) + " out of bounds for dimension size " +
+                                         std::to_string(dim_size));
+            }
+
+            return normalized;
+        }
+
+        NormalizedSlice normalize_slice_spec(const Tensor::SliceSpec& slice,
+                                             int64_t dim_size,
+                                             const char* op_name) {
+            const int64_t step = slice.step.value_or(1);
+            if (step == 0) {
+                throw std::runtime_error(std::string(op_name) + ": slice step cannot be zero");
+            }
+
+            if (step > 0) {
+                int64_t start = slice.start.value_or(0);
+                int64_t stop = slice.end.value_or(dim_size);
+
+                if (start < 0) start += dim_size;
+                if (stop < 0) stop += dim_size;
+
+                start = std::clamp(start, int64_t{0}, dim_size);
+                stop = std::clamp(stop, int64_t{0}, dim_size);
+
+                size_t length = 0;
+                if (start < stop) {
+                    const int64_t span = stop - start;
+                    length = static_cast<size_t>((span + step - 1) / step);
+                }
+
+                return NormalizedSlice{
+                    .start = start,
+                    .stop = stop,
+                    .step = step,
+                    .length = length,
+                };
+            }
+
+            int64_t start = slice.start.value_or(dim_size - 1);
+            int64_t stop = slice.end.value_or(-1);
+
+            if (slice.start.has_value() && start < 0) {
+                start += dim_size;
+            }
+            if (slice.start.has_value()) {
+                start = std::clamp(start, int64_t{-1}, dim_size - 1);
+            } else if (dim_size == 0) {
+                start = -1;
+            }
+
+            if (slice.end.has_value() && stop < 0) {
+                stop += dim_size;
+            }
+            if (slice.end.has_value()) {
+                stop = std::clamp(stop, int64_t{-1}, dim_size - 1);
+            } else {
+                stop = -1;
+            }
+
+            size_t length = 0;
+            if (start > stop) {
+                const int64_t span = start - stop;
+                const int64_t abs_step = -step;
+                length = static_cast<size_t>((span + abs_step - 1) / abs_step);
+            }
+
+            return NormalizedSlice{
+                .start = start,
+                .stop = stop,
+                .step = step,
+                .length = length,
+            };
+        }
+
         std::vector<float> copy_logical_data(const Tensor& tensor) {
             const auto sh = tensor.shape();
             const auto& st = tensor.stride();
@@ -150,20 +243,164 @@ namespace cpptensor {
             return copied;
         }
 
+        void throw_autograd_unsupported_if_required(const Tensor& tensor, const char* op_name) {
+            if (tensor.requires_grad()) {
+                throw std::runtime_error(
+                    std::string("autograd: operation '") + op_name +
+                    "' is not supported for tensors that require gradients");
+            }
+        }
+
     } // namespace
 
     // ---------- Constructors ----------
     Tensor::Tensor(const std::vector<size_t>& shape,
                    const std::vector<float>& values,
+                   bool requires_grad,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {
+        impl_->set_requires_grad(requires_grad);
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<float>& values,
+                   DeviceType device)
+        : Tensor(shape, values, false, device) {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   float value,
+                   bool requires_grad,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, value, device))
+    {
+        impl_->set_requires_grad(requires_grad);
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   std::initializer_list<float> values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, std::vector<float>(values), device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   std::initializer_list<int> values,
+                   DeviceType device)
+        : impl_(nullptr)
+    {
+        std::vector<float> converted;
+        converted.reserve(values.size());
+        for (int value : values) {
+            converted.push_back(static_cast<float>(value));
+        }
+        impl_ = std::make_shared<TensorImpl>(shape, converted, device);
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<double>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<std::int32_t>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<bool>& values,
                    DeviceType device)
         : impl_(std::make_shared<TensorImpl>(shape, values, device))
     {}
 
     Tensor::Tensor(const std::vector<size_t>& shape,
                    float value,
-                   DeviceType device)
-        : impl_(std::make_shared<TensorImpl>(shape, value, device))
-    {}
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<double>(value), device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<std::int32_t>(value), device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0.0f, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   double value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<float>(value), device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<std::int32_t>(value), device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0.0, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   std::int32_t value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<float>(value), device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<double>(value), device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   bool value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? 1.0f : 0.0f, device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? 1.0 : 0.0, device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? std::int32_t{1} : std::int32_t{0}, device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+        }
+    }
 
     Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
         : impl_(std::move(impl))
@@ -179,37 +416,121 @@ namespace cpptensor {
 
     // ---------- Factories ----------
     Tensor Tensor::zeros(const std::vector<size_t>& shape,
+                         bool requires_grad,
                          DeviceType device) {
-        return Tensor(shape, 0.0f, device);
+        Tensor out(shape, 0.0f, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::zeros(const std::vector<size_t>& shape,
+                         DeviceType device,
+                         DType dtype) {
+        return Tensor(shape, 0.0f, device, dtype);
     }
 
     Tensor Tensor::ones(const std::vector<size_t>& shape,
+                        bool requires_grad,
                         DeviceType device) {
-        return Tensor(shape, 1.0f, device);
+        Tensor out(shape, 1.0f, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::ones(const std::vector<size_t>& shape,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, 1.0f, device, dtype);
     }
 
     Tensor Tensor::full(const std::vector<size_t>& shape,
                         float value,
+                        bool requires_grad,
                         DeviceType device) {
-        return Tensor(shape, value, device);
+        Tensor out(shape, value, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        float value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        double value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        std::int32_t value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        bool value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
     }
 
     Tensor Tensor::randn(const std::vector<size_t>& shape,
+                         bool requires_grad,
                          DeviceType device) {
+        Tensor out = randn(shape, device, DType::FLOAT32);
+        out.set_requires_grad(requires_grad);
+        return out;
+    }
+
+    Tensor Tensor::randn(const std::vector<size_t>& shape,
+                         DeviceType device,
+                         DType dtype) {
         size_t total = 1;
-        for (auto s : shape) total *= s;
-        std::vector<float> data(total);
+        for (auto s_dim : shape) total *= s_dim;
         static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
+
+        if (dtype == DType::FLOAT64) {
+            std::normal_distribution<double> d(0.0, 1.0);
+            std::vector<double> data(total);
+            for (size_t i = 0; i < total; ++i) data[i] = d(gen);
+            return Tensor(shape, data, device);
+        }
+
         std::normal_distribution<float> d(0.0f, 1.0f);
+        std::vector<float> data(total);
         for (size_t i = 0; i < total; ++i) data[i] = d(gen);
-        return Tensor(shape, data, device);
+
+        if (dtype == DType::FLOAT32) {
+            return Tensor(shape, data, device);
+        }
+
+        if (dtype == DType::INT32) {
+            std::vector<std::int32_t> out(total);
+            for (size_t i = 0; i < total; ++i) {
+                out[i] = static_cast<std::int32_t>(std::lrint(data[i]));
+            }
+            return Tensor(shape, out, device);
+        }
+
+        std::vector<bool> out(total);
+        for (size_t i = 0; i < total; ++i) {
+            out[i] = data[i] > 0.0f;
+        }
+        return Tensor(shape, out, device);
     }
 
     Tensor Tensor::from_ptr(const std::vector<size_t>& shape,
                            float* data_ptr,
                            std::shared_ptr<TensorImpl> owner,
-                           DeviceType device) {
-        auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device);
+                           DeviceType device,
+                           DType dtype) {
+        auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device, dtype);
         return Tensor(std::move(impl));
     }
 
@@ -231,46 +552,36 @@ namespace cpptensor {
         return static_cast<const TensorImpl&>(*impl).device();
     }
 
+    Tensor Tensor::to(DeviceType device) const {
+        const auto impl = require_impl(__func__);
+        return Tensor(impl->copy_to(device));
+    }
+
+    Tensor Tensor::copy_to(DeviceType device) const {
+        return to(device);
+    }
+
+    DType Tensor::dtype() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).dtype();
+    }
+
 
     void Tensor::print() const {
         const auto impl = require_impl(__func__);
         const auto &s = impl->shape();
+        const auto& logical = data();
+
         std::cout << "Tensor(shape=[";
         for (size_t i = 0; i < s.size(); ++i) {
             if (i) std::cout << ", ";
             std::cout << s[i];
         }
-        std::cout << "], values=[";
+        std::cout << "], dtype=" << dtype_name(impl->dtype()) << ", values=[";
 
-        // Use stride-aware access for views/sliced tensors
-        const auto &strides = impl->stride();
-        const float* data_ptr = impl->data_ptr();
-        size_t total_elements = numel();
-
-        // Helper to convert flat index to multi-dimensional indices
-        auto flat_to_indices = [&](size_t flat_idx) -> std::vector<size_t> {
-            std::vector<size_t> indices(s.size());
-            for (int i = (int)s.size() - 1; i >= 0; --i) {
-                indices[i] = flat_idx % s[i];
-                flat_idx /= s[i];
-            }
-            return indices;
-        };
-
-        // Helper to compute strided offset from multi-dimensional indices
-        auto compute_offset = [&](const std::vector<size_t>& indices) -> size_t {
-            size_t offset = 0;
-            for (size_t i = 0; i < indices.size(); ++i) {
-                offset += indices[i] * strides[i];
-            }
-            return offset;
-        };
-
-        for (size_t i = 0; i < total_elements; ++i) {
+        for (size_t i = 0; i < logical.size(); ++i) {
             if (i) std::cout << ", ";
-            auto indices = flat_to_indices(i);
-            size_t offset = compute_offset(indices);
-            std::cout << data_ptr[offset];
+            std::cout << logical[i];
             if (i >= 31) { std::cout << ", ..."; break; }
         }
         std::cout << "])\n";
@@ -280,14 +591,13 @@ namespace cpptensor {
         // small pretty printer: only for 1D or 2D tensors
         const auto impl = require_impl(__func__);
         const auto &s = impl->shape();
-        const auto &strides = impl->stride();
-        const float* data_ptr = impl->data_ptr();
+        const auto &logical = data();
 
         if (s.size() == 1) {
             std::cout << "[";
             for (size_t i = 0; i < s[0]; ++i) {
                 if (i) std::cout << ", ";
-                std::cout << data_ptr[i * strides[0]];
+                std::cout << logical[i];
             }
             std::cout << "]\n";
         } else if (s.size() == 2) {
@@ -295,8 +605,8 @@ namespace cpptensor {
                 std::cout << "[";
                 for (size_t c = 0; c < s[1]; ++c) {
                     if (c) std::cout << ", ";
-                    size_t offset = r * strides[0] + c * strides[1];
-                    std::cout << data_ptr[offset];
+                    const size_t offset = r * s[1] + c;
+                    std::cout << logical[offset];
                 }
                 std::cout << "]\n";
             }
@@ -339,6 +649,12 @@ namespace cpptensor {
 
         // Create view TensorImpl that shares data with this tensor
         auto view_impl = std::make_shared<TensorImpl>(impl, new_shape);
+        view_impl->set_requires_grad(impl->requires_grad());
+        if (impl->requires_grad()) {
+            view_impl->set_grad_fn([parent = impl](const std::vector<float>& grad) {
+                parent->backward(grad);
+            });
+        }
 
         Tensor result;
         result.impl_ = view_impl;
@@ -346,13 +662,18 @@ namespace cpptensor {
     }
 
     Tensor Tensor::reshape(const std::vector<size_t>& new_shape) const {
-        require_impl(__func__);
+        const auto impl = require_impl(__func__);
         if (is_contiguous()) {
             return view(new_shape);  // Zero-copy if possible
-        } else {
-            // Must copy to make contiguous first
-            return contiguous().view(new_shape);
         }
+
+        if (impl->requires_grad()) {
+            throw std::runtime_error(
+                "autograd: reshape on non-contiguous tensors requiring gradients is not supported");
+        }
+
+        // Must copy to make contiguous first
+        return contiguous().view(new_shape);
     }
 
     Tensor Tensor::flatten(int start_dim, int end_dim) const {
@@ -402,10 +723,10 @@ namespace cpptensor {
                          std::optional<int64_t> start,
                          std::optional<int64_t> end,
                          std::optional<int64_t> step) const {
-        const auto impl = require_impl(__func__);
+        require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "slice");
         const int rank = static_cast<int>(ndim());
 
-        // Normalize negative dimension
         int norm_dim = dim;
         if (norm_dim < 0) {
             norm_dim += rank;
@@ -416,65 +737,151 @@ namespace cpptensor {
                                    " out of range for tensor with " + std::to_string(rank) + " dimensions");
         }
 
-        auto new_shape = shape();
-        const auto& base_stride = impl->stride();
-        std::vector<size_t> new_stride = base_stride;
+        std::vector<IndexSpec> specs(static_cast<size_t>(rank), IndexSpec(SliceSpec{}));
+        specs[static_cast<size_t>(norm_dim)] = SliceSpec(start, end, step);
+        return index(specs);
+    }
 
-        const int64_t dim_size = static_cast<int64_t>(new_shape[norm_dim]);
+    Tensor Tensor::index(const std::vector<IndexSpec>& indices) const {
+        const auto impl = require_impl(__func__);
+        const auto& src_shape = impl->shape();
+        const auto& src_stride = impl->stride();
+        const int rank = static_cast<int>(src_shape.size());
 
-        // Default step is 1
-        const int64_t step_value = step.value_or(1);
-        if (step_value <= 0) {
-            throw std::runtime_error("slice: step must be positive, got " + std::to_string(step_value));
+        if (static_cast<int>(indices.size()) > rank) {
+            throw std::runtime_error("index: received " + std::to_string(indices.size()) +
+                                     " indices for tensor with rank " + std::to_string(rank));
         }
 
-        // Helper function to clamp indices to valid range
-        const auto clamp_index = [dim_size](int64_t idx) -> int64_t {
-            if (dim_size == 0) {
-                return 0;
-            }
-            // Handle negative indices (Python-style)
-            if (idx < 0) {
-                idx += dim_size;
-            }
-            // Clamp to valid range [0, dim_size]
-            if (idx < 0) {
-                idx = 0;
-            }
-            if (idx > dim_size) {
-                idx = dim_size;
-            }
-            return idx;
+        struct AxisPlan {
+            bool is_scalar = false;
+            int64_t scalar_index = 0;
+            int64_t start = 0;
+            int64_t step = 1;
+            size_t length = 0;
+            bool has_negative_step = false;
         };
 
-        // Normalize start and end indices
-        int64_t start_idx = clamp_index(start.value_or(0));
-        int64_t end_idx = clamp_index(end.value_or(dim_size));
+        std::vector<AxisPlan> axis_plans(static_cast<size_t>(rank));
+        bool has_negative_step = false;
 
-        // Compute slice length
-        size_t slice_len = 0;
-        if (end_idx > start_idx && dim_size > 0) {
-            const int64_t distance = end_idx - start_idx;
-            slice_len = static_cast<size_t>((distance + step_value - 1) / step_value);
+        for (int axis = 0; axis < rank; ++axis) {
+            const int64_t dim_size = static_cast<int64_t>(src_shape[static_cast<size_t>(axis)]);
+            const bool user_provided = static_cast<size_t>(axis) < indices.size();
+            const IndexSpec spec = user_provided
+                ? indices[static_cast<size_t>(axis)]
+                : IndexSpec(SliceSpec{});
+
+            AxisPlan plan;
+            if (std::holds_alternative<int64_t>(spec.value)) {
+                plan.is_scalar = true;
+                plan.scalar_index = normalize_scalar_index(std::get<int64_t>(spec.value), dim_size, "index");
+                axis_plans[static_cast<size_t>(axis)] = plan;
+                continue;
+            }
+
+            const auto normalized = normalize_slice_spec(std::get<SliceSpec>(spec.value), dim_size, "index");
+            plan.start = normalized.start;
+            plan.step = normalized.step;
+            plan.length = normalized.length;
+            plan.has_negative_step = normalized.step < 0;
+            has_negative_step = has_negative_step || plan.has_negative_step;
+
+            axis_plans[static_cast<size_t>(axis)] = plan;
         }
 
-        // Update shape and stride for sliced dimension
-        new_shape[norm_dim] = slice_len;
-        new_stride[norm_dim] = base_stride[norm_dim] * static_cast<size_t>(step_value);
+        if (!has_negative_step) {
+            std::vector<size_t> out_shape;
+            std::vector<size_t> out_stride;
+            out_shape.reserve(src_shape.size());
+            out_stride.reserve(src_shape.size());
 
-        // Calculate offset from base data
-        size_t offset_delta = 0;
-        if (dim_size > 0 && start_idx > 0) {
-            offset_delta = static_cast<size_t>(start_idx) * base_stride[norm_dim];
+            size_t offset_delta = 0;
+            for (int axis = 0; axis < rank; ++axis) {
+                const auto& plan = axis_plans[static_cast<size_t>(axis)];
+                const size_t axis_stride = src_stride[static_cast<size_t>(axis)];
+
+                if (plan.is_scalar) {
+                    offset_delta += static_cast<size_t>(plan.scalar_index) * axis_stride;
+                    continue;
+                }
+
+                if (plan.length > 0 && plan.start > 0) {
+                    offset_delta += static_cast<size_t>(plan.start) * axis_stride;
+                }
+
+                out_shape.push_back(plan.length);
+                out_stride.push_back(axis_stride * static_cast<size_t>(plan.step));
+            }
+
+            auto view_impl = std::make_shared<TensorImpl>(impl, out_shape, out_stride, offset_delta);
+            return Tensor(std::move(view_impl));
         }
 
-        // Create view with modified shape, stride, and offset
-        auto view_impl = std::make_shared<TensorImpl>(impl, new_shape, new_stride, offset_delta);
-        return Tensor(std::move(view_impl));
+        std::vector<size_t> out_shape;
+        out_shape.reserve(src_shape.size());
+        for (int axis = 0; axis < rank; ++axis) {
+            const auto& plan = axis_plans[static_cast<size_t>(axis)];
+            if (!plan.is_scalar) {
+                out_shape.push_back(plan.length);
+            }
+        }
+
+        size_t out_numel = 1;
+        for (const size_t d : out_shape) {
+            out_numel *= d;
+        }
+
+        std::vector<float> out_data(out_numel, 0.0f);
+        const float* src = impl->data_ptr();
+
+        if (out_numel > 0) {
+            std::vector<size_t> out_indices(out_shape.size(), 0);
+            for (size_t out_linear = 0; out_linear < out_numel; ++out_linear) {
+                int64_t src_offset = 0;
+                size_t out_axis = 0;
+
+                for (int axis = 0; axis < rank; ++axis) {
+                    const auto& plan = axis_plans[static_cast<size_t>(axis)];
+                    int64_t src_index = 0;
+
+                    if (plan.is_scalar) {
+                        src_index = plan.scalar_index;
+                    } else {
+                        src_index = plan.start +
+                                    static_cast<int64_t>(out_indices[out_axis]) * plan.step;
+                        ++out_axis;
+                    }
+
+                    src_offset += src_index * static_cast<int64_t>(src_stride[static_cast<size_t>(axis)]);
+                }
+
+                if (src_offset < 0) {
+                    throw std::runtime_error("index: internal error produced negative source offset");
+                }
+
+                out_data[out_linear] = src[static_cast<size_t>(src_offset)];
+
+                for (int d = static_cast<int>(out_shape.size()) - 1; d >= 0; --d) {
+                    const size_t dim = static_cast<size_t>(d);
+                    if (++out_indices[dim] < out_shape[dim]) {
+                        break;
+                    }
+                    out_indices[dim] = 0;
+                }
+            }
+        }
+
+        return Tensor(out_shape, out_data, device_type());
+    }
+
+    Tensor Tensor::index(std::initializer_list<IndexSpec> indices) const {
+        return index(std::vector<IndexSpec>(indices.begin(), indices.end()));
     }
 
     Tensor Tensor::squeeze(int dim) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "squeeze");
         auto sh = shape();
         std::vector<size_t> new_shape;
 
@@ -510,6 +917,7 @@ namespace cpptensor {
 
     Tensor Tensor::unsqueeze(int dim) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "unsqueeze");
         auto sh = shape();
         int ndims = static_cast<int>(sh.size());
 
@@ -536,6 +944,7 @@ namespace cpptensor {
 
     Tensor Tensor::permute(const std::vector<int>& dims) const {
         const auto impl = require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "permute");
         auto old_shape = shape();
         auto old_stride = stride();
         int ndims = static_cast<int>(old_shape.size());
@@ -581,6 +990,7 @@ namespace cpptensor {
 
     Tensor Tensor::transpose(int dim0, int dim1) const {
         require_impl(__func__);
+        throw_autograd_unsupported_if_required(*this, "transpose");
         int ndims = static_cast<int>(ndim());
 
         // Default: transpose last two dimensions for 2D case
@@ -624,16 +1034,156 @@ namespace cpptensor {
 
     Tensor Tensor::contiguous() const {
         const auto impl = require_impl(__func__);
-        if (impl->can_expose_direct_data_buffer()) {
+        if (impl->dtype() == DType::FLOAT32 && impl->can_expose_direct_data_buffer()) {
             return *this;  // Already backed by a direct compact buffer
         }
 
-        return Tensor(shape(), copy_logical_data(*this), device_type());
+        if (impl->requires_grad()) {
+            throw std::runtime_error(
+                "autograd: contiguous() materialization for tensors requiring gradients is not supported");
+        }
+
+        return clone();
     }
 
     Tensor Tensor::clone() const {
-        require_impl(__func__);
-        return Tensor(shape(), copy_logical_data(*this), device_type());
+        const auto impl = require_impl(__func__);
+        std::vector<std::uint8_t> copied;
+        impl->materialize_logical_data_bytes(copied);
+        const auto total = numel();
+
+        Tensor out;
+        switch (impl->dtype()) {
+            case DType::BOOL: {
+                std::vector<bool> data(total, false);
+                for (size_t i = 0; i < total; ++i) {
+                    data[i] = copied[i] != 0;
+                }
+                out = Tensor(shape(), data, device_type());
+                break;
+            }
+            case DType::INT32: {
+                std::vector<std::int32_t> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(std::int32_t));
+                out = Tensor(shape(), data, device_type());
+                break;
+            }
+            case DType::FLOAT32: {
+                std::vector<float> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(float));
+                out = Tensor(shape(), data, device_type());
+                break;
+            }
+            case DType::FLOAT64: {
+                std::vector<double> data(total);
+                std::memcpy(data.data(), copied.data(), total * sizeof(double));
+                out = Tensor(shape(), data, device_type());
+                break;
+            }
+        }
+
+        if (impl->requires_grad()) {
+            if (impl->dtype() != DType::FLOAT32) {
+                throw std::runtime_error("autograd: gradient tracking currently requires float32 tensors");
+            }
+            out.set_requires_grad(true);
+            out.impl()->set_grad_fn([parent = impl](const std::vector<float>& grad) {
+                parent->backward(grad);
+            });
+        }
+
+        return out;
+    }
+
+    bool Tensor::requires_grad() const {
+        const auto impl = require_impl(__func__);
+        return impl->requires_grad();
+    }
+
+    void Tensor::set_requires_grad(bool requires_grad) {
+        const auto impl = require_impl(__func__);
+        if (requires_grad && impl->dtype() != DType::FLOAT32) {
+            throw std::runtime_error("autograd: requires_grad currently supports float32 tensors only");
+        }
+        impl->set_requires_grad(requires_grad);
+    }
+
+    Tensor Tensor::grad() const {
+        const auto impl = require_impl(__func__);
+        const auto& grad_data = impl->grad_data();
+        if (grad_data.empty()) {
+            return Tensor::zeros(shape(), false, device_type());
+        }
+        return Tensor(shape(), grad_data, false, device_type());
+    }
+
+    void Tensor::zero_grad() {
+        const auto impl = require_impl(__func__);
+        impl->zero_grad();
+        impl->set_has_called_backward(false);
+    }
+
+    void Tensor::backward() const {
+        const auto impl = require_impl(__func__);
+        if (!impl->requires_grad()) {
+            throw std::runtime_error("autograd: backward() called on a tensor that does not require gradients");
+        }
+
+        std::vector<float> grad_seed(numel(), 1.0f);
+        impl->backward(grad_seed);
+    }
+
+    void Tensor::backward(const Tensor& grad_output) const {
+        const auto impl = require_impl(__func__);
+        if (!impl->requires_grad()) {
+            throw std::runtime_error("autograd: backward() called on a tensor that does not require gradients");
+        }
+
+        if (grad_output.shape() != shape()) {
+            throw std::runtime_error("autograd: grad_output shape must match tensor shape");
+        }
+
+        impl->backward(grad_output.data());
+    }
+
+    Tensor Tensor::astype(DType target_dtype) const {
+        const auto impl = require_impl(__func__);
+        const auto source_dtype = impl->dtype();
+
+        if (target_dtype == source_dtype) {
+            return clone();
+        }
+
+        const auto total = numel();
+        const auto& logical = data();
+
+        switch (target_dtype) {
+            case DType::BOOL: {
+                std::vector<bool> out(total, false);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = logical[i] != 0.0f;
+                }
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::INT32: {
+                std::vector<std::int32_t> out(total, 0);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = static_cast<std::int32_t>(logical[i]);
+                }
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::FLOAT32:
+                return Tensor(shape(), logical, device_type());
+            case DType::FLOAT64: {
+                std::vector<double> out(total, 0.0);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = static_cast<double>(logical[i]);
+                }
+                return Tensor(shape(), out, device_type());
+            }
+        }
+
+        throw std::runtime_error("astype: unsupported target dtype");
     }
 
     void Tensor::save(const std::string& path) const {
@@ -760,12 +1310,12 @@ namespace cpptensor {
 
     Tensor Tensor::max(bool keepdim) const {
         require_impl(__func__);
-        return cpptensor::max(*this, -1, keepdim);
+        return cpptensor::max(*this, std::nullopt, keepdim);
     }
 
     Tensor Tensor::min(bool keepdim) const {
         require_impl(__func__);
-        return cpptensor::min(*this, -1, keepdim);
+        return cpptensor::min(*this, std::nullopt, keepdim);
     }
 
     // Dimensional reduction overloads (with dim parameter)
@@ -781,20 +1331,12 @@ namespace cpptensor {
 
     Tensor Tensor::max(int dim, bool keepdim) const {
         require_impl(__func__);
-        int actual_dim = dim;
-        if (actual_dim < 0) {
-            actual_dim += static_cast<int>(ndim());
-        }
-        return cpptensor::max(*this, actual_dim, keepdim);
+        return cpptensor::max(*this, std::optional<int>(dim), keepdim);
     }
 
     Tensor Tensor::min(int dim, bool keepdim) const {
         require_impl(__func__);
-        int actual_dim = dim;
-        if (actual_dim < 0) {
-            actual_dim += static_cast<int>(ndim());
-        }
-        return cpptensor::min(*this, actual_dim, keepdim);
+        return cpptensor::min(*this, std::optional<int>(dim), keepdim);
     }
 
 } // namespace cpptensor

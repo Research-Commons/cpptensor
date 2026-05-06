@@ -745,4 +745,73 @@ The AVX2 and AVX512 implementations deliver **exceptional performance** for redu
 
 *SIMD benchmarks conducted on November 7, 2025. Original matmul benchmarks from November 5, 2025 using OpenBLAS (single-threaded). Results averaged over multiple iterations with warmup runs.*
 
-````
+---
+
+## 7. Machine-Readable Benchmark Baselines and Regression Checks
+
+cpptensor benchmarks now support structured result collection and automated
+regression detection for CI/release workflows.
+
+### 7.1 Structured output artifacts
+
+Use the benchmark harness to run one or more benchmark binaries and export a
+single machine-readable report:
+
+```bash
+conda run -n cpptensor python3 benchmarks/benchmark_harness.py \
+  --build-dir cmake-build-release \
+  --output-dir benchmark_results \
+  --backends cpu,avx2,avx512,cuda
+```
+
+This writes:
+
+- `benchmark_results/<timestamp>/benchmark_results.json`
+  Consolidated run data for all executed backends.
+- `benchmark_results/<timestamp>/benchmark_results.csv`
+  Flat table suitable for spreadsheet/database ingestion.
+- `benchmark_results/latest.json` and `benchmark_results/latest.csv`
+  Convenience pointers to the newest run.
+
+Each JSON run captures:
+
+- Google Benchmark rows (`real_time`, `cpu_time`, iteration metadata, etc.)
+- CPU/GPU environment details (CPU model/flags, core count, CUDA GPU info if available)
+- Build metadata from `CMakeCache.txt` (AVX/CUDA/OpenBLAS toggles, compiler, build type)
+- Source-control context (branch, commit SHA, dirty status)
+
+### 7.2 Baseline comparison and regression thresholds
+
+Compare a new result file against a stored baseline:
+
+```bash
+conda run -n cpptensor python3 benchmarks/compare_benchmark_results.py \
+  --baseline benchmarks/baselines/linux-x86_64-release.json \
+  --candidate benchmark_results/latest.json \
+  --max-regression-pct 5 \
+  --thresholds benchmarks/regression_thresholds.example.json \
+  --output-json benchmark_results/latest.regression-report.json
+```
+
+Rules:
+
+- Regressions are detected per benchmark row as percent slowdown in `real_time`.
+- Default threshold is `--max-regression-pct` (5% above).
+- Optional override file supports benchmark-specific limits via glob patterns.
+  See `benchmarks/regression_thresholds.example.json`.
+- Exit code is non-zero when a regression exceeds the configured threshold.
+
+### 7.3 End-to-end wrapper
+
+`run_all_benchmarks.sh` now runs the structured harness and can optionally run
+regression checks in one command:
+
+```bash
+BASELINE_JSON=benchmarks/baselines/linux-x86_64-release.json \
+THRESHOLDS_FILE=benchmarks/regression_thresholds.example.json \
+conda run -n cpptensor ./run_all_benchmarks.sh
+```
+
+Set `FAIL_ON_MISSING_BINARY=1` to fail when requested backend binaries are not
+built, and `FAIL_ON_MISSING_ROWS=1` to fail if benchmark keys differ between
+baseline and candidate.

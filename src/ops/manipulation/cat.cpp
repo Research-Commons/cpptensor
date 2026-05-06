@@ -1,21 +1,12 @@
 #include "cpptensor/ops/manipulation/cat.hpp"
+#include "cpptensor/ops/helperOps.hpp"
+#include "cpptensor/tensor/autograd_utils.hpp"
 #include <stdexcept>
 #include <cstring>
 
 namespace cpptensor {
 
 namespace {
-    const char* deviceTypeName(DeviceType device) {
-        switch (device) {
-            case DeviceType::CPU:
-                return "CPU";
-            case DeviceType::CUDA:
-                return "CUDA";
-            default:
-                return "Unknown";
-        }
-    }
-
     // Helper function to copy a slice from src tensor to dst tensor at given
     // offset along concat_dim.
     void copySlice(Tensor& dst, const Tensor& src, int concat_dim, size_t offset_in_concat_dim) {
@@ -131,6 +122,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
 
     for (size_t i = 0; i < tensors.size(); ++i) {
         const auto& t = tensors[i];
+        autograd::throw_if_requires_grad(t, "cat");
         auto t_shape = t.shape();
 
         if (t.device_type() != common_device) {
@@ -162,6 +154,10 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
         total_concat_size += t_shape[concat_dim];
     }
 
+    if (common_device == DeviceType::CUDA) {
+        throw_cuda_unsupported("cat");
+    }
+
     // 5. Compute output shape
     std::vector<size_t> out_shape = ref_shape;
     out_shape[concat_dim] = total_concat_size;
@@ -173,11 +169,7 @@ Tensor cat(const std::vector<Tensor>& tensors, int dim) {
     size_t offset_in_concat_dim = 0;
 
     for (const auto& t : tensors) {
-        // Copy directly from the logical tensor view. copySlice() handles
-        // offsets for contiguous views and strides for non-contiguous ones.
         copySlice(result, t, concat_dim, offset_in_concat_dim);
-
-        // Move offset forward by this tensor's size in concat dimension.
         offset_in_concat_dim += t.shape()[concat_dim];
     }
 

@@ -2,12 +2,14 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <functional>
+#include <variant>
+#include <cstdint>
 
 #include "cpptensor/enums/dispatcherEnum.h"
 
 namespace cpptensor {
 
-    class Function; // forward declaration for autograd support
     class Tensor;
 
     /**
@@ -77,6 +79,15 @@ namespace cpptensor {
         TensorImpl(const std::vector<size_t>& shape,
                    const std::vector<float>& data,
                    DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<double>& data,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<std::int32_t>& data,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   const std::vector<bool>& data,
+                   DeviceType device = DeviceType::CPU);
 
         /**
          * @brief Construct TensorImpl filled with a constant value
@@ -97,6 +108,15 @@ namespace cpptensor {
          */
         TensorImpl(const std::vector<size_t>& shape,
                    float fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   double fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   std::int32_t fill_value,
+                   DeviceType device = DeviceType::CPU);
+        TensorImpl(const std::vector<size_t>& shape,
+                   bool fill_value,
                    DeviceType device = DeviceType::CPU);
 
         /**
@@ -131,7 +151,15 @@ namespace cpptensor {
         TensorImpl(const std::vector<size_t>& shape,
                    float* data_ptr,
                    std::shared_ptr<TensorImpl> owner,
-                   DeviceType device = DeviceType::CPU);
+                   DeviceType device = DeviceType::CPU,
+                   DType dtype = DType::FLOAT32);
+
+        ~TensorImpl();
+
+        TensorImpl(const TensorImpl&) = delete;
+        TensorImpl& operator=(const TensorImpl&) = delete;
+        TensorImpl(TensorImpl&&) = delete;
+        TensorImpl& operator=(TensorImpl&&) = delete;
 
         // =============== Data Accessors ===============
 
@@ -181,6 +209,22 @@ namespace cpptensor {
         float* data_ptr();
 
         /**
+         * @brief Get raw element pointer with dtype-aware storage
+         */
+        const void* raw_data_ptr() const;
+        void* raw_data_ptr();
+
+        /**
+         * @brief Get pointer for a specific backend and ensure residency
+         */
+        const float* backend_data_ptr(DeviceType dev) const;
+
+        /**
+         * @brief Get mutable pointer for a specific backend and mark it dirty
+         */
+        float* backend_data_ptr(DeviceType dev);
+
+        /**
          * @brief Get const reference to stride information
          *
          * Strides define memory layout for multi-dimensional indexing.
@@ -221,27 +265,55 @@ namespace cpptensor {
 
         /**
          * @brief Check if backward pass has been executed
-         *
-         * Used by autograd system to track whether gradients have been
-         * computed for this tensor during backpropagation.
-         *
-         * @return true if backward() has been called, false otherwise
-         *
-         * @note Currently declared but not fully implemented. Part of
-         *       future autograd infrastructure.
          */
         bool has_called_backward() const;
 
-        /**
-         * @brief Set backward execution flag
-         *
-         * Marks whether backward pass has been executed for this tensor.
-         *
-         * @param val true to mark as executed, false otherwise
-         *
-         * @note Part of autograd bookkeeping for preventing duplicate gradients
-         */
         void set_has_called_backward(bool val);
+
+        /**
+         * @brief Autograd requires_grad flag
+         */
+        bool requires_grad() const;
+
+        /**
+         * @brief Set autograd requires_grad flag
+         */
+        void set_requires_grad(bool val);
+
+        /**
+         * @brief Zero the accumulated gradient buffer
+         */
+        void zero_grad();
+
+        /**
+         * @brief Get accumulated gradient buffer
+         */
+        const std::vector<float>& grad_data() const;
+
+        /**
+         * @brief Accumulate gradient into this tensor
+         */
+        void accumulate_grad(const std::vector<float>& grad);
+
+        /**
+         * @brief Propagate gradient through autograd graph
+         */
+        void backward(const std::vector<float>& grad);
+
+        /**
+         * @brief Install backward callback for this tensor
+         */
+        void set_grad_fn(std::function<void(const std::vector<float>&)> fn);
+
+        /**
+         * @brief Remove backward callback
+         */
+        void clear_grad_fn();
+
+        /**
+         * @brief Whether this tensor has a backward callback
+         */
+        bool has_grad_fn() const;
 
         // =============== Shape and Metadata ===============
 
@@ -281,17 +353,30 @@ namespace cpptensor {
         DeviceType device() const;
 
         /**
+         * @brief Get tensor element datatype
+         */
+        DType dtype() const;
+
+        /**
          * @brief Set device for tensor storage
          *
-         * Changes the device type. Note: This does NOT actually move data.
-         * It only updates the metadata flag. Actual data transfer must be
-         * handled separately.
+         * Changes the preferred device and performs required data migration
+         * for float32 owning tensors.
          *
          * @param dev New device type
          *
-         * @warning Does not perform actual data migration. Use with caution.
          */
         void set_device(DeviceType dev);
+
+        /**
+         * @brief Copy tensor storage to another device and return a new impl
+         */
+        std::shared_ptr<TensorImpl> copy_to(DeviceType dev) const;
+
+        /**
+         * @brief Ensure the current storage is resident on the target device
+         */
+        void ensure_resident(DeviceType dev) const;
 
     private:
         /**
@@ -303,11 +388,20 @@ namespace cpptensor {
          * @brief Materialize logical row-major contents into a compact buffer
          */
         void materialize_logical_data(std::vector<float>& out) const;
+        void materialize_logical_data_bytes(std::vector<std::uint8_t>& out) const;
+        std::size_t element_size_bytes() const;
+        bool is_pointer_backed_view() const;
 
         /**
-         * @brief Raw data buffer in row-major order
+         * @brief Typed storage payload (bool uses uint8_t values 0/1)
          */
-        std::vector<float> data_;
+        using Storage = std::variant<
+            std::vector<std::uint8_t>, // BOOL
+            std::vector<std::int32_t>, // INT32
+            std::vector<float>,        // FLOAT32
+            std::vector<double>        // FLOAT64
+        >;
+        Storage storage_;
 
         /**
          * @brief Cached compact logical contents for const data() on views
@@ -349,12 +443,24 @@ namespace cpptensor {
         size_t offset_ = 0;
 
         /**
-         * @brief Gradient function for autograd
-         *
-         * Pointer to the operation that created this tensor, used for
-         * automatic differentiation during backward pass.
+         * @brief Backward callback for autograd
          */
-        std::shared_ptr<Function> grad_fn_;
+        std::function<void(const std::vector<float>&)> grad_fn_;
+
+        /**
+         * @brief Accumulated gradient buffer (logical row-major order)
+         */
+        std::vector<float> grad_data_;
+
+        /**
+         * @brief Whether this tensor should participate in autograd
+         */
+        bool requires_grad_ = false;
+
+        /**
+         * @brief Backward bookkeeping flag
+         */
+        bool has_called_backward_ = false;
 
         /**
          * @brief Tensor dimensions
@@ -365,6 +471,22 @@ namespace cpptensor {
          * @brief Device where tensor is stored (CPU, CUDA, etc.)
          */
         DeviceType device_ = DeviceType::CPU;
+        DType dtype_ = DType::FLOAT32;
+
+        /**
+         * @brief CUDA device storage for owning contiguous float32 tensors
+         */
+        mutable float* cuda_data_ = nullptr;
+
+        /**
+         * @brief Whether host storage contains up-to-date logical contents
+         */
+        mutable bool host_data_valid_ = true;
+
+        /**
+         * @brief Whether CUDA storage contains up-to-date logical contents
+         */
+        mutable bool cuda_data_valid_ = false;
 
         /**
          * @brief Compute strides from shape (row-major layout)
@@ -382,6 +504,11 @@ namespace cpptensor {
          * ```
          */
         std::vector<size_t> compute_strides(const std::vector<size_t>& shape);
+
+        /**
+         * @brief Free CUDA storage owned by this impl
+         */
+        void release_cuda_storage() const;
     };
 
 } // namespace cpptensor

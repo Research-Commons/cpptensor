@@ -72,6 +72,8 @@ On CPU, `div`, `log`, `sqrt`, and `pow` follow the corresponding real-valued `st
 
 CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log`, `sqrt`, or `pow`. Attempting those ops on `DeviceType::CUDA` tensors fails with the dispatcher’s missing-kernel error instead of silently using different semantics.
 
+Device transfer is explicit via `tensor.to(DeviceType::CPU/CUDA)` and `tensor.copy_to(...)`. CPU-only ops (for example `matmul`, `dot`, `cat`, `stack`) reject CUDA tensors with an explicit error that tells callers to transfer to CPU first.
+
 Regression coverage for these contracts lives in `test/test_ops.cpp` (table-driven CPU generic/AVX2 edge-case checks) and `test/test_cuda_dispatch.cpp` (missing CUDA-kernel boundary checks).
 
 ### 4. Activation Functions
@@ -140,8 +142,12 @@ Regression coverage for these contracts lives in `test/test_ops.cpp` (table-driv
 - Reduce specific dimension: `A.sum(0)`, `A.sum(1)`, etc.
 - Keep dimension: `A.sum(1, keepdim=true)` preserves shape
 - Negative indexing: `A.sum(-1)` for last dimension
+- **0-D scalar contract:** true scalars use `shape == {}` and `ndim() == 0`
+  across reductions and shape ops (`view`, `squeeze`, `unsqueeze`, `print`)
 - Full test coverage: 2D and 3D tensors validated
 - **AVX2/AVX512 SIMD optimizations**: Vectorized implementations for max/min operations
+- **Numerical stability upgrade**: `sum()` and `mean()` use compensated/wider accumulation paths, and `dot()` routes through `KernelRegistry` CPU/AVX2/AVX512 kernels with wider accumulation to reduce cancellation error on long or adversarial inputs.
+- **Trade-off**: these stability-oriented paths can be modestly slower than pure FP32/SIMD accumulation, while optimized SIMD fast paths remain in place for operations that are not accumulation-sensitive (for example `max()`/`min()`).
 - Performance: CPU baseline + highly optimized AVX2/AVX512 kernels
 
 **Usage:**
