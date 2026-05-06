@@ -142,6 +142,8 @@ Regression coverage for these contracts lives in `test/test_ops.cpp` (table-driv
 - Negative indexing: `A.sum(-1)` for last dimension
 - Full test coverage: 2D and 3D tensors validated
 - **AVX2/AVX512 SIMD optimizations**: Vectorized implementations for max/min operations
+- **Numerical stability upgrade**: `sum()`, `mean()`, and `dot()` use compensated/wider accumulation paths to reduce cancellation error on long or adversarial inputs.
+- **Trade-off**: these stability-first paths can be slower than pure SIMD accumulation, while optimized SIMD fast paths remain in place for operations that are not accumulation-sensitive (for example `max()`/`min()`).
 - Performance: CPU baseline + highly optimized AVX2/AVX512 kernels
 
 **Usage:**

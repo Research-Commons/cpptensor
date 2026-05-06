@@ -1,6 +1,7 @@
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
+#include <cmath>
 #include <stdexcept>
 
 #ifdef USE_OPENBLAS
@@ -46,13 +47,22 @@ namespace cpptensor {
             const float* Adata = A_blas.impl()->data_ptr();
             const float* Bdata = B_blas.impl()->data_ptr();
 
-            float result = cblas_sdot(
-                static_cast<int>(n),  // number of elements
-                Adata, 1,             // vector A, stride 1
-                Bdata, 1              // vector B, stride 1
-            );
+            // Stability-first accumulation: this avoids catastrophic cancellation
+            // seen with single-precision accumulation on adversarial inputs.
+            double sum = 0.0;
+            double compensation = 0.0;
+            for (size_t i = 0; i < n; ++i) {
+                const double value = static_cast<double>(Adata[i]) * static_cast<double>(Bdata[i]);
+                const double t = sum + value;
+                if (std::abs(sum) >= std::abs(value)) {
+                    compensation += (sum - t) + value;
+                } else {
+                    compensation += (value - t) + sum;
+                }
+                sum = t;
+            }
 
-            Out.data().data()[0] = result;
+            Out.data().data()[0] = static_cast<float>(sum + compensation);
     #else
             KernelRegistry::instance().getKernel(OpType::Dot, A.device_type())(A, B, Out);
     #endif

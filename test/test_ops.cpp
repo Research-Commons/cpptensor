@@ -815,6 +815,38 @@ TEST_CASE("linear algebra kernels honor logical tensor views", "[linear-algebra]
     }
 }
 
+TEST_CASE("sum, mean, and dot improve cancellation-heavy accumulation accuracy",
+          "[numerics][stability]") {
+    cpptensor::initialize_kernels();
+
+    SECTION("small cancellation pattern preserves low-order terms") {
+        cpptensor::Tensor values({4}, {1.0e8f, 1.0f, -1.0e8f, 1.0f});
+        cpptensor::Tensor ones({4}, {1.0f, 1.0f, 1.0f, 1.0f});
+
+        require_data(values.sum(), {2.0f});
+        require_data(values.mean(), {0.5f});
+        require_data(cpptensor::dot(values, ones), {2.0f});
+    }
+
+    SECTION("long adversarial vectors retain accumulated unit contributions") {
+        constexpr size_t triplets = 4096;
+        std::vector<float> values;
+        values.reserve(triplets * 3);
+        for (size_t i = 0; i < triplets; ++i) {
+            values.push_back(1.0e8f);
+            values.push_back(1.0f);
+            values.push_back(-1.0e8f);
+        }
+
+        cpptensor::Tensor vector({values.size()}, values);
+        cpptensor::Tensor ones({values.size()}, std::vector<float>(values.size(), 1.0f));
+
+        require_data(vector.sum(), {static_cast<float>(triplets)});
+        require_data(vector.mean(), {1.0f / 3.0f});
+        require_data(cpptensor::dot(vector, ones), {static_cast<float>(triplets)});
+    }
+}
+
 TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]") {
     cpptensor::initialize_kernels();
 
