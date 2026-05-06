@@ -7,9 +7,14 @@
 #include <sstream>
 #include <optional>
 #include <cstdint>
+#include <type_traits>
+#include <initializer_list>
+#include <variant>
+#include <utility>
 
 #include "cpptensor/tensor/tensorimpl.hpp"
 #include "cpptensor/enums/dispatcherEnum.h"   // for DeviceType
+#include "cpptensor/tensor/dtype_utils.hpp"
 
 namespace cpptensor {
 
@@ -47,6 +52,37 @@ namespace cpptensor {
  */
 class Tensor {
     public:
+        /**
+         * @brief Slice descriptor used by tuple-style indexing APIs.
+         *
+         * Represents Python-like slicing semantics [start:end:step]. Any field can be
+         * omitted (std::nullopt). step defaults to 1 when omitted.
+         */
+        struct SliceSpec {
+            std::optional<int64_t> start = std::nullopt;
+            std::optional<int64_t> end = std::nullopt;
+            std::optional<int64_t> step = std::nullopt;
+
+            SliceSpec() = default;
+            SliceSpec(std::optional<int64_t> start_,
+                      std::optional<int64_t> end_,
+                      std::optional<int64_t> step_ = std::nullopt)
+                : start(start_), end(end_), step(step_) {}
+        };
+
+        /**
+         * @brief Single-axis index descriptor for tuple-style indexing.
+         *
+         * Holds either a scalar integer index (dimension is removed) or a SliceSpec.
+         */
+        struct IndexSpec {
+            std::variant<int64_t, SliceSpec> value;
+
+            IndexSpec(int64_t scalar_index) : value(scalar_index) {}
+            IndexSpec(const SliceSpec& slice) : value(slice) {}
+            IndexSpec(SliceSpec&& slice) : value(std::move(slice)) {}
+        };
+
         // =============== Constructors ===============
 
         /**
@@ -68,6 +104,21 @@ class Tensor {
          */
         Tensor(const std::vector<size_t>& shape,
                const std::vector<float>& values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               std::initializer_list<float> values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               std::initializer_list<int> values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<double>& values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<std::int32_t>& values,
+               DeviceType device = DeviceType::CPU);
+        Tensor(const std::vector<size_t>& shape,
+               const std::vector<bool>& values,
                DeviceType device = DeviceType::CPU);
 
         /**
@@ -119,7 +170,8 @@ class Tensor {
          * ```
          */
         static Tensor zeros(const std::vector<size_t>& shape,
-                            DeviceType device = DeviceType::CPU);
+                            DeviceType device = DeviceType::CPU,
+                            DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor filled with ones
@@ -134,7 +186,8 @@ class Tensor {
          * ```
          */
         static Tensor ones(const std::vector<size_t>& shape,
-                           DeviceType device = DeviceType::CPU);
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor with random normal distribution (mean=0, std=1)
@@ -152,7 +205,8 @@ class Tensor {
          * ```
          */
         static Tensor randn(const std::vector<size_t>& shape,
-                            DeviceType device = DeviceType::CPU);
+                            DeviceType device = DeviceType::CPU,
+                            DType dtype = DType::FLOAT32);
 
         /**
          * @brief Create tensor filled with a constant value
@@ -169,7 +223,20 @@ class Tensor {
          */
         static Tensor full(const std::vector<size_t>& shape,
                            float value,
-                           DeviceType device = DeviceType::CPU);
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT32);
+        static Tensor full(const std::vector<size_t>& shape,
+                           double value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::FLOAT64);
+        static Tensor full(const std::vector<size_t>& shape,
+                           std::int32_t value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::INT32);
+        static Tensor full(const std::vector<size_t>& shape,
+                           bool value,
+                           DeviceType device = DeviceType::CPU,
+                           DType dtype = DType::BOOL);
 
         /**
          * @brief Create zero-copy view from raw pointer (advanced use)
@@ -205,7 +272,8 @@ class Tensor {
         static Tensor from_ptr(const std::vector<size_t>& shape,
                               float* data_ptr,
                               std::shared_ptr<TensorImpl> owner,
-                              DeviceType device = DeviceType::CPU);
+                              DeviceType device = DeviceType::CPU,
+                              DType dtype = DType::FLOAT32);
 
         // =============== Shape and Metadata ===============
 
@@ -255,6 +323,7 @@ class Tensor {
          * @return DeviceType enum (CPU, CUDA, etc.)
          */
         DeviceType device_type() const;
+        DType dtype() const;
 
         /**
          * @brief Print tensor data in compact format
@@ -419,15 +488,16 @@ class Tensor {
          * Produces a view into the tensor without copying data. The slice is
          * defined by [start, end) with optional step controlling stride between
          * selected elements. Negative indices are interpreted relative to the
-         * dimension size (e.g., -1 = last element). Only positive step values
-         * are supported.
+         * dimension size (e.g., -1 = last element). Positive steps produce
+         * zero-copy views. Negative steps are supported and return materialized
+         * compact tensors.
          *
          * @param dim Dimension to slice (0-indexed, supports negative indexing)
          * @param start Starting index (inclusive). Defaults to 0 if not set.
          * @param end Ending index (exclusive). Defaults to dim size if not set.
-         * @param step Step between indices. Defaults to 1. Must be positive.
+         * @param step Step between indices. Defaults to 1. Must not be 0.
          * @return Tensor view representing the requested slice (zero-copy)
-         * @throws std::runtime_error if dim out of range or step <= 0
+         * @throws std::runtime_error if dim out of range or step == 0
          *
          * @example
          * ```cpp
@@ -445,6 +515,32 @@ class Tensor {
                      std::optional<int64_t> start = std::nullopt,
                      std::optional<int64_t> end = std::nullopt,
                      std::optional<int64_t> step = std::nullopt) const;
+
+        /**
+         * @brief Tuple-style multi-axis indexing and slicing.
+         *
+         * Supports per-axis scalar indexing and/or slice specs in a single call.
+         * Missing trailing axes are interpreted as full slices.
+         *
+         * Scalar index:
+         * - Supports negative indices.
+         * - Selects one element on that axis and removes the axis from output.
+         *
+         * Slice spec:
+         * - Supports negative start/end indices.
+         * - Supports positive and negative step values (step must not be 0).
+         * - Positive-step only paths return zero-copy views.
+         * - Any negative-step axis materializes a compact tensor copy.
+         *
+         * @param indices Per-axis index descriptors. Length must be <= ndim().
+         * @return Indexed tensor
+         */
+        Tensor index(const std::vector<IndexSpec>& indices) const;
+
+        /**
+         * @brief Convenience overload for tuple-style indexing with braced lists.
+         */
+        Tensor index(std::initializer_list<IndexSpec> indices) const;
 
         /**
          * @brief Remove dimensions of size 1
@@ -557,6 +653,41 @@ class Tensor {
          * @return Independent copy of the tensor
          */
         Tensor clone() const;
+        Tensor astype(DType target_dtype) const;
+
+        // =============== Serialization / Checkpoint I/O ===============
+
+        /**
+         * @brief Save tensor contents and metadata to disk
+         *
+         * Writes a versioned cpptensor binary checkpoint that stores:
+         * - format version
+         * - dtype tag (currently float32)
+         * - device tag
+         * - shape metadata
+         * - flattened row-major values
+         *
+         * View tensors are serialized by materializing their logical contents.
+         * The loaded tensor is therefore contiguous, while preserving values,
+         * shape, and device metadata.
+         *
+         * @param path Destination file path
+         * @throws std::runtime_error on I/O or serialization failures
+         */
+        void save(const std::string& path) const;
+
+        /**
+         * @brief Load tensor from a cpptensor checkpoint file
+         *
+         * Reconstructs a tensor from a file produced by Tensor::save(). The
+         * loader validates format magic/version metadata and throws for corrupt
+         * or unsupported checkpoint variants.
+         *
+         * @param path Source file path
+         * @return Loaded tensor
+         * @throws std::runtime_error on I/O, corruption, or version mismatch
+         */
+        static Tensor load(const std::string& path);
 
         // =============== Reduction Operations ===============
 
@@ -817,11 +948,11 @@ class Tensor {
          * @brief Element-wise equality comparison: C = (A == B)
          *
          * Performs element-wise equality comparison with broadcasting support.
-         * Returns a tensor with 1.0f where elements are equal, 0.0f otherwise.
+         * Returns a bool tensor where each element is true when inputs are equal, false otherwise.
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator==(const Tensor& A, const Tensor& B);
         friend Tensor operator==(const Tensor& A, float scalar);
@@ -832,7 +963,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator!=(const Tensor& A, const Tensor& B);
         friend Tensor operator!=(const Tensor& A, float scalar);
@@ -843,7 +974,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator>(const Tensor& A, const Tensor& B);
         friend Tensor operator>(const Tensor& A, float scalar);
@@ -854,7 +985,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator<(const Tensor& A, const Tensor& B);
         friend Tensor operator<(const Tensor& A, float scalar);
@@ -865,7 +996,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator>=(const Tensor& A, const Tensor& B);
         friend Tensor operator>=(const Tensor& A, float scalar);
@@ -876,7 +1007,7 @@ class Tensor {
          *
          * @param A Left operand tensor
          * @param B Right operand tensor
-         * @return Boolean tensor (1.0f = true, 0.0f = false)
+         * @return Bool tensor (dtype=bool)
          */
         friend Tensor operator<=(const Tensor& A, const Tensor& B);
         friend Tensor operator<=(const Tensor& A, float scalar);
@@ -905,7 +1036,20 @@ class Tensor {
          */
         Tensor(const std::vector<size_t>& shape,
                float value,
-               DeviceType device = DeviceType::CPU);
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::FLOAT32);
+        Tensor(const std::vector<size_t>& shape,
+               double value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::FLOAT64);
+        Tensor(const std::vector<size_t>& shape,
+               std::int32_t value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::INT32);
+        Tensor(const std::vector<size_t>& shape,
+               bool value,
+               DeviceType device = DeviceType::CPU,
+               DType dtype = DType::BOOL);
 
         /**
          * @brief Protected constructor from TensorImpl pointer

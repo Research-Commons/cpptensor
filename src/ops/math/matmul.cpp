@@ -18,10 +18,6 @@ namespace cpptensor {
     // =============== Helper Functions for Optimization ===============
 
     namespace {
-        const float* raw_data(const Tensor& tensor) {
-            return tensor.impl()->data_ptr();
-        }
-
         float* raw_data(Tensor& tensor) {
             return tensor.impl()->data_ptr();
         }
@@ -317,9 +313,9 @@ namespace cpptensor {
             1                        // stride in y (contiguous)
         );
     #else
-        // Fallback: use CPU kernel with SIMD optimization
-        // The gemvKernel will automatically dispatch to AVX512/AVX2 if available
-        //TODO : switch to proper kernel dispatcher
+        // Fallback: use the generic CPU GEMV kernel.
+        // Reading through Tensor::data() keeps sliced and transposed inputs
+        // logically correct even when BLAS is unavailable.
         cpptensor::CPU::gemvKernel(A, x, y);
     #endif
 

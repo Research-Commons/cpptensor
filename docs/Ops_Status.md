@@ -72,6 +72,8 @@ On CPU, `div`, `log`, `sqrt`, and `pow` follow the corresponding real-valued `st
 
 CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log`, `sqrt`, or `pow`. Attempting those ops on `DeviceType::CUDA` tensors fails with the dispatcher’s missing-kernel error instead of silently using different semantics.
 
+Regression coverage for these contracts lives in `test/test_ops.cpp` (table-driven CPU generic/AVX2 edge-case checks) and `test/test_cuda_dispatch.cpp` (missing CUDA-kernel boundary checks).
+
 ### 4. Activation Functions
 
 | Operation | Function | Description | Status |
@@ -142,6 +144,8 @@ CUDA-tagged tensors currently do **not** have registered kernels for `div`, `log
   across reductions and shape ops (`view`, `squeeze`, `unsqueeze`, `print`)
 - Full test coverage: 2D and 3D tensors validated
 - **AVX2/AVX512 SIMD optimizations**: Vectorized implementations for max/min operations
+- **Numerical stability upgrade**: `sum()`, `mean()`, and `dot()` use compensated/wider accumulation paths to reduce cancellation error on long or adversarial inputs.
+- **Trade-off**: these stability-first paths can be slower than pure SIMD accumulation, while optimized SIMD fast paths remain in place for operations that are not accumulation-sensitive (for example `max()`/`min()`).
 - Performance: CPU baseline + highly optimized AVX2/AVX512 kernels
 
 **Usage:**
