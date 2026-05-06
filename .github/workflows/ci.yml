@@ -1,0 +1,235 @@
+name: cpptensor-ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu-build-test:
+    name: CPU build/test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-gcc
+            os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+            use_openblas: ON
+          - name: ubuntu-clang
+            os: ubuntu-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+            use_openblas: ON
+          - name: macos-clang
+            os: macos-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+            use_openblas: ON
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: cpptensor
+          environment-file: environment.yml
+          auto-activate-base: false
+          use-mamba: true
+
+      - name: Show selected compiler versions
+        run: |
+          set -euo pipefail
+          "${{ matrix.c_compiler }}" --version
+          "${{ matrix.cxx_compiler }}" --version
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.c_compiler }}
+          CXX: ${{ matrix.cxx_compiler }}
+          BUILD_DIR: build/${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${BUILD_DIR}"
+          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CUDA=OFF \
+            -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
+            -DBUILD_AVX2=OFF \
+            -DBUILD_AVX512=OFF 2>&1 | tee "${BUILD_DIR}/configure.log"
+
+      - name: Build
+        env:
+          BUILD_DIR: build/${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor cmake --build "${BUILD_DIR}" --parallel 2>&1 | tee "${BUILD_DIR}/build.log"
+
+      - name: Test
+        env:
+          BUILD_DIR: build/${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor ctest --test-dir "${BUILD_DIR}" --output-on-failure 2>&1 | tee "${BUILD_DIR}/ctest.log"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.name }}
+          if-no-files-found: ignore
+          path: |
+            build/${{ matrix.name }}/configure.log
+            build/${{ matrix.name }}/build.log
+            build/${{ matrix.name }}/ctest.log
+            build/${{ matrix.name }}/CMakeFiles/CMakeOutput.log
+            build/${{ matrix.name }}/CMakeFiles/CMakeError.log
+            build/${{ matrix.name }}/Testing/Temporary/LastTest.log
+
+  feature-toggle-build:
+    name: Feature toggles (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-openblas-off
+            os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+            use_openblas: OFF
+            build_avx2: OFF
+            build_avx512: OFF
+          - name: linux-avx2-on
+            os: ubuntu-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+            use_openblas: ON
+            build_avx2: ON
+            build_avx512: OFF
+          - name: linux-avx512-on
+            os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+            use_openblas: ON
+            build_avx2: OFF
+            build_avx512: ON
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: cpptensor
+          environment-file: environment.yml
+          auto-activate-base: false
+          use-mamba: true
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.c_compiler }}
+          CXX: ${{ matrix.cxx_compiler }}
+          BUILD_DIR: build/${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${BUILD_DIR}"
+          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CUDA=OFF \
+            -DUSE_OPENBLAS=${{ matrix.use_openblas }} \
+            -DBUILD_AVX2=${{ matrix.build_avx2 }} \
+            -DBUILD_AVX512=${{ matrix.build_avx512 }} 2>&1 | tee "${BUILD_DIR}/configure.log"
+
+      - name: Build
+        env:
+          BUILD_DIR: build/${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor cmake --build "${BUILD_DIR}" --target cpptensor --parallel 2>&1 | tee "${BUILD_DIR}/build.log"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.name }}
+          if-no-files-found: ignore
+          path: |
+            build/${{ matrix.name }}/configure.log
+            build/${{ matrix.name }}/build.log
+            build/${{ matrix.name }}/CMakeFiles/CMakeOutput.log
+            build/${{ matrix.name }}/CMakeFiles/CMakeError.log
+
+  optional-cuda-build:
+    name: Optional CUDA leg (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: cpptensor
+          environment-file: environment.yml
+          auto-activate-base: false
+          use-mamba: true
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.24
+        with:
+          cuda: '12.5.0'
+          method: network
+
+      - name: Show nvcc version
+        run: nvcc --version
+
+      - name: Configure CUDA build
+        env:
+          BUILD_DIR: build/cuda-optional
+        run: |
+          set -euo pipefail
+          mkdir -p "${BUILD_DIR}"
+          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CUDA=ON \
+            -DUSE_OPENBLAS=ON \
+            -DBUILD_AVX2=OFF \
+            -DBUILD_AVX512=OFF 2>&1 | tee "${BUILD_DIR}/configure.log"
+
+      - name: Build CUDA target
+        env:
+          BUILD_DIR: build/cuda-optional
+        run: |
+          set -euo pipefail
+          conda run -n cpptensor cmake --build "${BUILD_DIR}" --target cpptensor --parallel 2>&1 | tee "${BUILD_DIR}/build.log"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-cuda-optional
+          if-no-files-found: ignore
+          path: |
+            build/cuda-optional/configure.log
+            build/cuda-optional/build.log
+            build/cuda-optional/CMakeFiles/CMakeOutput.log
+            build/cuda-optional/CMakeFiles/CMakeError.log
