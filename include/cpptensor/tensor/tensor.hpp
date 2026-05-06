@@ -549,6 +549,40 @@ class Tensor {
          */
         Tensor clone() const;
 
+        // =============== Serialization / Checkpoint I/O ===============
+
+        /**
+         * @brief Save tensor contents and metadata to disk
+         *
+         * Writes a versioned cpptensor binary checkpoint that stores:
+         * - format version
+         * - dtype tag (currently float32)
+         * - device tag
+         * - shape metadata
+         * - flattened row-major values
+         *
+         * View tensors are serialized by materializing their logical contents.
+         * The loaded tensor is therefore contiguous, while preserving values,
+         * shape, and device metadata.
+         *
+         * @param path Destination file path
+         * @throws std::runtime_error on I/O or serialization failures
+         */
+        void save(const std::string& path) const;
+
+        /**
+         * @brief Load tensor from a cpptensor checkpoint file
+         *
+         * Reconstructs a tensor from a file produced by Tensor::save(). The
+         * loader validates format magic/version metadata and throws for corrupt
+         * or unsupported checkpoint variants.
+         *
+         * @param path Source file path
+         * @return Loaded tensor
+         * @throws std::runtime_error on I/O, corruption, or version mismatch
+         */
+        static Tensor load(const std::string& path);
+
         // =============== Reduction Operations ===============
 
         // =============== Reduction Operations ===============
