@@ -1,6 +1,7 @@
 #include "cpptensor/backend/cpu_backend.h"
 #include "cpptensor/backend/pow_utils.hpp"
 #include "cpptensor/utils/broadcastUtils.hpp"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <experimental/simd>
@@ -8,22 +9,31 @@
 //Need to fix these ( reduce so much repetitions. dont care that much rn as its just basic C++ kernels not even being called mostly)
 
 namespace {
-    inline void kahan_add(double value, double& sum, double& compensation) {
+    inline void compensated_add(double value, double& sum, double& compensation) {
         if (!std::isfinite(value) || !std::isfinite(sum) || !std::isfinite(compensation)) {
             sum += value;
             compensation = 0.0;
             return;
         }
 
-        const double adjusted = value - compensation;
-        const double next = sum + adjusted;
-        if (!std::isfinite(next)) {
-            sum = next;
+        // Neumaier summation improves stability when magnitudes differ sharply.
+        const double t = sum + value;
+        if (!std::isfinite(t)) {
+            sum = t;
             compensation = 0.0;
             return;
         }
-        compensation = (next - sum) - adjusted;
-        sum = next;
+
+        if (std::abs(sum) >= std::abs(value)) {
+            compensation += (sum - t) + value;
+        } else {
+            compensation += (value - t) + sum;
+        }
+        sum = t;
+    }
+
+    inline float finalize_compensated_sum(double sum, double compensation) {
+        return static_cast<float>(sum + compensation);
     }
 }
 
@@ -534,12 +544,14 @@ void cpptensor::CPU::dotKernel(const Tensor &A, const Tensor &B, Tensor &Out) {
     double result = 0.0;
     double compensation = 0.0;
     for (size_t i = 0; i < n; ++i) {
-        kahan_add(static_cast<double>(a_data[i]) * static_cast<double>(b_data[i]),
-                  result,
-                  compensation);
+        compensated_add(
+            static_cast<double>(a_data[i]) * static_cast<double>(b_data[i]),
+            result,
+            compensation
+        );
     }
 
-    Out.data()[0] = static_cast<float>(result);
+    Out.data()[0] = finalize_compensated_sum(result, compensation);
 }
 
 // =============== Reduction Operations ===============
@@ -585,9 +597,9 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
         double compensation = 0.0;
         const size_t total = input.numel();
         for (size_t i = 0; i < total; ++i) {
-            kahan_add(static_cast<double>(in_data[i]), sum, compensation);
+            compensated_add(static_cast<double>(in_data[i]), sum, compensation);
         }
-        out_data[0] = static_cast<float>(sum);
+        out_data[0] = finalize_compensated_sum(sum, compensation);
         return;
     }
 
@@ -611,9 +623,10 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
         inner *= in_shape[i];
     }
 
+    // Use compensated accumulators per output slot for cancellation-heavy inputs.
     const size_t out_total = outer * inner;
-    std::vector<double> accum(out_total, 0.0);
-    std::vector<double> compensation(out_total, 0.0);
+    std::vector<double> sums(out_total, 0.0);
+    std::vector<double> compensations(out_total, 0.0);
 
     // Accumulate: for each position in input, add to corresponding output position
     // Input layout: [outer, reduce, inner]
@@ -623,15 +636,17 @@ void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, boo
             for (size_t i = 0; i < inner; ++i) {
                 size_t in_idx = (o * reduce + r) * inner + i;
                 size_t out_idx = o * inner + i;
-                kahan_add(static_cast<double>(in_data[in_idx]),
-                          accum[out_idx],
-                          compensation[out_idx]);
+                compensated_add(
+                    static_cast<double>(in_data[in_idx]),
+                    sums[out_idx],
+                    compensations[out_idx]
+                );
             }
         }
     }
 
     for (size_t i = 0; i < out_total; ++i) {
-        out_data[i] = static_cast<float>(accum[i]);
+        out_data[i] = finalize_compensated_sum(sums[i], compensations[i]);
     }
 }
 

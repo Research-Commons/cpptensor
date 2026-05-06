@@ -411,6 +411,18 @@ TEST_CASE("cat preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::cat({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::cat({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 4});
+    require_data(cuda_from_view, {
+        0, 3, 0, 3,
+        1, 4, 1, 4,
+        2, 5, 2, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("stack inserts a new dimension", "[manipulation][stack]") {
@@ -586,6 +598,18 @@ TEST_CASE("stack preserves device placement and rejects mixed-device inputs",
                         Catch::Matchers::ContainsSubstring("Tensor 0 is on CPU"));
     REQUIRE_THROWS_WITH(cpptensor::stack({cpu, cuda_a}, 0),
                         Catch::Matchers::ContainsSubstring("tensor 1 is on CUDA"));
+
+    cpptensor::Tensor cuda_matrix({2, 3}, {0, 1, 2, 3, 4, 5}, DeviceType::CUDA);
+    auto cuda_transposed = cuda_matrix.transpose(0, 1);
+    auto cuda_from_view = cpptensor::stack({cuda_transposed, cuda_transposed}, -1);
+
+    require_shape(cuda_from_view, {3, 2, 2});
+    require_data(cuda_from_view, {
+        0, 0, 3, 3,
+        1, 1, 4, 4,
+        2, 2, 5, 5
+    });
+    REQUIRE(cuda_from_view.device_type() == DeviceType::CUDA);
 }
 
 TEST_CASE("squeeze can reduce singleton tensors to scalars", "[manipulation][squeeze]") {
@@ -804,6 +828,38 @@ TEST_CASE("linear algebra kernels honor logical tensor views", "[linear-algebra]
 
         require_shape(result, {1, 2});
         require_data(result, {5, 7});
+    }
+}
+
+TEST_CASE("sum, mean, and dot improve cancellation-heavy accumulation accuracy",
+          "[numerics][stability]") {
+    cpptensor::initialize_kernels();
+
+    SECTION("small cancellation pattern preserves low-order terms") {
+        cpptensor::Tensor values({4}, {1.0e8f, 1.0f, -1.0e8f, 1.0f});
+        cpptensor::Tensor ones({4}, {1.0f, 1.0f, 1.0f, 1.0f});
+
+        require_data(values.sum(), {2.0f});
+        require_data(values.mean(), {0.5f});
+        require_data(cpptensor::dot(values, ones), {2.0f});
+    }
+
+    SECTION("long adversarial vectors retain accumulated unit contributions") {
+        constexpr size_t triplets = 4096;
+        std::vector<float> values;
+        values.reserve(triplets * 3);
+        for (size_t i = 0; i < triplets; ++i) {
+            values.push_back(1.0e8f);
+            values.push_back(1.0f);
+            values.push_back(-1.0e8f);
+        }
+
+        cpptensor::Tensor vector({values.size()}, values);
+        cpptensor::Tensor ones({values.size()}, std::vector<float>(values.size(), 1.0f));
+
+        require_data(vector.sum(), {static_cast<float>(triplets)});
+        require_data(vector.mean(), {1.0f / 3.0f});
+        require_data(cpptensor::dot(vector, ones), {static_cast<float>(triplets)});
     }
 }
 
