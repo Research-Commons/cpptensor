@@ -43,4 +43,14 @@ if(CMAKE_GENERATOR)
             -DREQUIRED_PATTERNS=BUILD_AVX2=ON\ requested,\ but\ AVX2\ kernels\ are\ unavailable
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
     )
+
+    add_test(
+        NAME cmake_package_consumer_smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DPRODUCER_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DCONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/package_consumer
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DBUILD_CONFIG=$<CONFIG>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_package_consumer_smoke.cmake
+    )
 endif()

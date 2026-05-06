@@ -6,6 +6,22 @@ https://deepwiki.com/Research-Commons/cpptensor/10.3-license
 # build
 Remember to clone the submodules - `` git clone --recurse-submodules <cpptensor> ``
 
+# install + downstream CMake usage
+Install cpptensor to a prefix:
+
+```bash
+cmake -S . -B build
+cmake --build build
+cmake --install build --prefix /tmp/cpptensor-install
+```
+
+Consume from another CMake project:
+
+```cmake
+find_package(cpptensor CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE cpptensor::cpptensor)
+```
+
 # runtime behavior
 Public tensor ops lazily initialize the kernel registry on first use, so a fresh
 process can call `A + B`, `sum()`, `matmul()`, and other registered ops without

@@ -4,8 +4,15 @@ cmake_minimum_required(VERSION 3.20)
 option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 option(USE_OPENBLAS "Use OpenBLAS if found on this system" ON)
+option(CPPTENSOR_INSTALL_PKGCONFIG "Install pkg-config metadata for cpptensor" ON)
 
-project(cpptensor LANGUAGES CXX)
+project(cpptensor VERSION 0.1.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+set(CPPTENSOR_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/cpptensor" CACHE PATH
+        "Install path for cpptensor CMake package metadata")
 
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -198,12 +205,18 @@ endif()
 
 # ==== Create Static Library ====
 add_library(cpptensor STATIC ${cpptensor_OBJ_SOURCES})
+add_library(cpptensor::cpptensor ALIAS cpptensor)
 
 # ==== Link OpenBLAS ====
+set(CPPTENSOR_PACKAGE_NEEDS_OPENBLAS OFF)
 if(HAVE_OPENBLAS)
-    target_include_directories(cpptensor PUBLIC ${OpenBLAS_INCLUDE_DIRS})
-    target_link_libraries(cpptensor PUBLIC ${OpenBLAS_LIBRARIES})
-    target_compile_definitions(cpptensor PUBLIC USE_OPENBLAS)
+    if(TARGET OpenBLAS::OpenBLAS)
+        target_link_libraries(cpptensor PUBLIC OpenBLAS::OpenBLAS)
+        set(CPPTENSOR_PACKAGE_NEEDS_OPENBLAS ON)
+    else()
+        target_include_directories(cpptensor PUBLIC ${OpenBLAS_INCLUDE_DIRS})
+        target_link_libraries(cpptensor PUBLIC ${OpenBLAS_LIBRARIES})
+    endif()
 endif()
 
 # ==== Pass build options as compiler definitions ====
@@ -221,8 +234,11 @@ set_target_properties(cpptensor PROPERTIES
 
 # ==== Include Directories ====
 target_include_directories(cpptensor
-        PUBLIC  ${CMAKE_SOURCE_DIR}/include            # Enables: #include "cpptensor/tensor/..."
-        PRIVATE ${CMAKE_SOURCE_DIR}/include/cpptensor  # Enables: #include "tensor/..."
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include/cpptensor>
 )
 
 ## ==== Link Cuda Backend ====
@@ -231,6 +247,55 @@ if(BUILD_CUDA)
             CUDA_SEPARABLE_COMPILATION ON
     )
     target_link_libraries(cpptensor PUBLIC CUDA::cudart)
+endif()
+
+# ==== Install + Package Export ====
+install(TARGETS cpptensor
+        EXPORT cpptensorTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+set(CPPTENSOR_PACKAGE_NEEDS_CUDA ${BUILD_CUDA})
+
+configure_package_config_file(
+        ${CMAKE_SOURCE_DIR}/cmake/cpptensorConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/cpptensorConfig.cmake
+        INSTALL_DESTINATION ${CPPTENSOR_INSTALL_CMAKEDIR}
+)
+
+write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/cpptensorConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/cpptensorConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/cpptensorConfigVersion.cmake
+        DESTINATION ${CPPTENSOR_INSTALL_CMAKEDIR}
+)
+
+install(EXPORT cpptensorTargets
+        FILE cpptensorTargets.cmake
+        NAMESPACE cpptensor::
+        DESTINATION ${CPPTENSOR_INSTALL_CMAKEDIR}
+)
+
+if(CPPTENSOR_INSTALL_PKGCONFIG)
+    configure_file(
+            ${CMAKE_SOURCE_DIR}/cmake/cpptensor.pc.in
+            ${CMAKE_CURRENT_BINARY_DIR}/cpptensor.pc
+            @ONLY
+    )
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cpptensor.pc
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 endif()
 
 # ==== Enable Testing ====
