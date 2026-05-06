@@ -4,6 +4,11 @@ cmake_minimum_required(VERSION 3.20)
 option(BUILD_CUDA "Use CUDA kernels" OFF)
 option(USE_STD_SIMD "Use C++ std::simd kernels instead of AVX intrinsics" OFF)
 option(USE_OPENBLAS "Use OpenBLAS if found on this system" ON)
+option(CPPTENSOR_ENABLE_ASAN "Enable AddressSanitizer instrumentation" OFF)
+option(CPPTENSOR_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer instrumentation" OFF)
+option(CPPTENSOR_ENABLE_TSAN "Enable ThreadSanitizer instrumentation" OFF)
+option(CPPTENSOR_ENABLE_STRICT_WARNINGS "Enable stricter compiler warning profile for cpptensor targets" OFF)
+option(CPPTENSOR_WARNINGS_AS_ERRORS "Treat enabled warnings as errors for cpptensor targets" OFF)
 
 project(cpptensor LANGUAGES CXX)
 
@@ -23,6 +28,112 @@ if(BUILD_CUDA)
 endif()
 
 include(CheckCXXSourceCompiles)
+
+set(CPPTENSOR_SANITIZER_COMPILE_OPTIONS "")
+set(CPPTENSOR_SANITIZER_LINK_OPTIONS "")
+set(CPPTENSOR_WARNING_OPTIONS "")
+set(CPPTENSOR_WARNING_ERROR_OPTION "")
+set(CPPTENSOR_ENABLED_SANITIZERS "")
+
+if(CPPTENSOR_ENABLE_ASAN AND CPPTENSOR_ENABLE_TSAN)
+    message(FATAL_ERROR "CPPTENSOR_ENABLE_ASAN and CPPTENSOR_ENABLE_TSAN cannot both be ON in the same build.")
+endif()
+
+set(CPPTENSOR_SANITIZER_REQUESTED FALSE)
+if(CPPTENSOR_ENABLE_ASAN OR CPPTENSOR_ENABLE_UBSAN OR CPPTENSOR_ENABLE_TSAN)
+    set(CPPTENSOR_SANITIZER_REQUESTED TRUE)
+endif()
+
+if(CPPTENSOR_SANITIZER_REQUESTED AND BUILD_CUDA)
+    message(FATAL_ERROR "Sanitizer builds currently require BUILD_CUDA=OFF in cpptensor.")
+endif()
+
+if(CPPTENSOR_SANITIZER_REQUESTED)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        message(FATAL_ERROR "Sanitizers are currently supported only with GCC/Clang-style compilers. Detected: ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+
+    if(CPPTENSOR_ENABLE_ASAN)
+        list(APPEND CPPTENSOR_ENABLED_SANITIZERS address)
+        list(APPEND CPPTENSOR_SANITIZER_COMPILE_OPTIONS -fsanitize=address)
+        list(APPEND CPPTENSOR_SANITIZER_LINK_OPTIONS -fsanitize=address)
+    endif()
+
+    if(CPPTENSOR_ENABLE_UBSAN)
+        list(APPEND CPPTENSOR_ENABLED_SANITIZERS undefined)
+        list(APPEND CPPTENSOR_SANITIZER_COMPILE_OPTIONS -fsanitize=undefined)
+        list(APPEND CPPTENSOR_SANITIZER_LINK_OPTIONS -fsanitize=undefined)
+    endif()
+
+    if(CPPTENSOR_ENABLE_TSAN)
+        list(APPEND CPPTENSOR_ENABLED_SANITIZERS thread)
+        list(APPEND CPPTENSOR_SANITIZER_COMPILE_OPTIONS -fsanitize=thread)
+        list(APPEND CPPTENSOR_SANITIZER_LINK_OPTIONS -fsanitize=thread)
+    endif()
+
+    list(APPEND CPPTENSOR_SANITIZER_COMPILE_OPTIONS -fno-omit-frame-pointer)
+endif()
+
+if(CPPTENSOR_ENABLE_STRICT_WARNINGS)
+    if(MSVC)
+        list(APPEND CPPTENSOR_WARNING_OPTIONS /W4 /permissive-)
+    else()
+        list(APPEND CPPTENSOR_WARNING_OPTIONS
+            -Wall
+            -Wextra
+            -Wpedantic
+            -Wformat=2
+            -Wnull-dereference
+            -Wnon-virtual-dtor
+        )
+    endif()
+endif()
+
+if(CPPTENSOR_WARNINGS_AS_ERRORS)
+    if(MSVC)
+        set(CPPTENSOR_WARNING_ERROR_OPTION /WX)
+    else()
+        set(CPPTENSOR_WARNING_ERROR_OPTION -Werror)
+    endif()
+endif()
+
+function(cpptensor_apply_build_safety_flags target_name)
+    if(NOT TARGET ${target_name})
+        message(FATAL_ERROR "cpptensor_apply_build_safety_flags called for unknown target '${target_name}'")
+    endif()
+
+    if(CPPTENSOR_WARNING_OPTIONS)
+        set(_warning_compile_options "")
+        foreach(_warning_option IN LISTS CPPTENSOR_WARNING_OPTIONS)
+            list(APPEND _warning_compile_options "$<$<COMPILE_LANGUAGE:CXX>:${_warning_option}>")
+        endforeach()
+        target_compile_options(${target_name} PRIVATE ${_warning_compile_options})
+    endif()
+
+    if(NOT CPPTENSOR_WARNING_ERROR_OPTION STREQUAL "")
+        target_compile_options(${target_name} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CPPTENSOR_WARNING_ERROR_OPTION}>")
+    endif()
+
+    if(CPPTENSOR_SANITIZER_COMPILE_OPTIONS)
+        set(_sanitizer_compile_options "")
+        foreach(_sanitizer_option IN LISTS CPPTENSOR_SANITIZER_COMPILE_OPTIONS)
+            list(APPEND _sanitizer_compile_options "$<$<COMPILE_LANGUAGE:CXX>:${_sanitizer_option}>")
+        endforeach()
+        target_compile_options(${target_name} PRIVATE ${_sanitizer_compile_options})
+    endif()
+
+    if(CPPTENSOR_SANITIZER_LINK_OPTIONS)
+        target_link_options(${target_name} PRIVATE ${CPPTENSOR_SANITIZER_LINK_OPTIONS})
+    endif()
+endfunction()
+
+if(CPPTENSOR_ENABLED_SANITIZERS)
+    list(JOIN CPPTENSOR_ENABLED_SANITIZERS ", " CPPTENSOR_ENABLED_SANITIZERS_DISPLAY)
+else()
+    set(CPPTENSOR_ENABLED_SANITIZERS_DISPLAY "none")
+endif()
+message(STATUS "Sanitizers enabled: ${CPPTENSOR_ENABLED_SANITIZERS_DISPLAY}")
+message(STATUS "Strict warnings profile: ${CPPTENSOR_ENABLE_STRICT_WARNINGS} (warnings-as-errors=${CPPTENSOR_WARNINGS_AS_ERRORS})")
 
 function(cpptensor_check_source_compiles required_flags source out_var)
     set(_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
@@ -177,12 +288,14 @@ if(CPPTENSOR_ENABLE_AVX2 AND AVX2_SRC)
     add_library(cpptensor_isa_avx2 OBJECT ${AVX2_SRC})
     target_compile_options(cpptensor_isa_avx2 PRIVATE ${CPPTENSOR_AVX2_COMPILE_FLAGS} -O3)
     target_include_directories(cpptensor_isa_avx2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    cpptensor_apply_build_safety_flags(cpptensor_isa_avx2)
 endif()
 
 if(CPPTENSOR_ENABLE_AVX512 AND AVX512_SRC)
     add_library(cpptensor_isa_avx512 OBJECT ${AVX512_SRC})
     target_compile_options(cpptensor_isa_avx512 PRIVATE ${CPPTENSOR_AVX512_COMPILE_FLAGS} -O3)
     target_include_directories(cpptensor_isa_avx512 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    cpptensor_apply_build_safety_flags(cpptensor_isa_avx512)
 endif()
 
 # ==== Create final static library, including object libs if present ====
@@ -198,6 +311,7 @@ endif()
 
 # ==== Create Static Library ====
 add_library(cpptensor STATIC ${cpptensor_OBJ_SOURCES})
+cpptensor_apply_build_safety_flags(cpptensor)
 
 # ==== Link OpenBLAS ====
 if(HAVE_OPENBLAS)

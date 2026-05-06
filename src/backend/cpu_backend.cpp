@@ -451,12 +451,14 @@ void cpptensor::CPU::gemmf32kernel(const Tensor &A, const Tensor &B, Tensor &Out
 
     //-----much faster cache friendly version with tiling and accumulator(fma)----
 
-    const int64_t M = A.shape()[0];
-    const int64_t K = A.shape()[1];
-    const int64_t KB = B.shape()[0];
-    const int64_t N = B.shape()[1];
+    const int64_t M = static_cast<int64_t>(A.shape()[0]);
+    const int64_t K = static_cast<int64_t>(A.shape()[1]);
+    const int64_t KB = static_cast<int64_t>(B.shape()[0]);
+    const int64_t N = static_cast<int64_t>(B.shape()[1]);
 
-    if (K != KB || Out.shape()[0] != M || Out.shape()[1] != N) {
+    if (K != KB ||
+        static_cast<int64_t>(Out.shape()[0]) != M ||
+        static_cast<int64_t>(Out.shape()[1]) != N) {
         throw std::runtime_error("CPU GEMM: shape mismatch (A: MxK, B: KxN, C: MxN)");
     }
 
@@ -548,6 +550,7 @@ void cpptensor::CPU::dotKernel(const Tensor &A, const Tensor &B, Tensor &Out) {
  * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
  */
 void cpptensor::CPU::sumKernel(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+    (void)keepdim;
     const auto& in_shape = input.shape();
     const size_t ndim = in_shape.size();
     const float* in_data = input.data().data();
@@ -677,6 +680,7 @@ void cpptensor::CPU::meanKernel(const Tensor& input, Tensor& output, int dim, bo
  * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
  */
 void cpptensor::CPU::maxKernel(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+    (void)keepdim;
     const auto& in_shape = input.shape();
     const size_t ndim = in_shape.size();
     const float* in_data = input.data().data();
@@ -760,6 +764,7 @@ void cpptensor::CPU::maxKernel(const Tensor& input, Tensor& output, int dim, boo
  * @param keepdim Whether to keep reduced dimension (size 1) or squeeze it
  */
 void cpptensor::CPU::minKernel(const Tensor& input, Tensor& output, int dim, bool keepdim) {
+    (void)keepdim;
     const auto& in_shape = input.shape();
     const size_t ndim = in_shape.size();
     const float* in_data = input.data().data();

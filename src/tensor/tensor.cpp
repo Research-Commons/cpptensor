@@ -12,6 +12,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <cstring>
 #include <array>
 #include <fstream>
 #include <limits>
@@ -252,10 +253,129 @@ namespace cpptensor {
     {}
 
     Tensor::Tensor(const std::vector<size_t>& shape,
-                   float value,
+                   std::initializer_list<float> values,
                    DeviceType device)
-        : impl_(std::make_shared<TensorImpl>(shape, value, device))
+        : impl_(std::make_shared<TensorImpl>(shape, std::vector<float>(values), device))
     {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   std::initializer_list<int> values,
+                   DeviceType device)
+        : impl_(nullptr)
+    {
+        std::vector<float> converted;
+        converted.reserve(values.size());
+        for (int value : values) {
+            converted.push_back(static_cast<float>(value));
+        }
+        impl_ = std::make_shared<TensorImpl>(shape, converted, device);
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<double>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<std::int32_t>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   const std::vector<bool>& values,
+                   DeviceType device)
+        : impl_(std::make_shared<TensorImpl>(shape, values, device))
+    {}
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   float value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<double>(value), device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<std::int32_t>(value), device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0.0f, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   double value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<float>(value), device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<std::int32_t>(value), device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0.0, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   std::int32_t value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<float>(value), device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, static_cast<double>(value), device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value != 0, device);
+                break;
+        }
+    }
+
+    Tensor::Tensor(const std::vector<size_t>& shape,
+                   bool value,
+                   DeviceType device,
+                   DType dtype)
+        : impl_(nullptr)
+    {
+        switch (dtype) {
+            case DType::FLOAT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? 1.0f : 0.0f, device);
+                break;
+            case DType::FLOAT64:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? 1.0 : 0.0, device);
+                break;
+            case DType::INT32:
+                impl_ = std::make_shared<TensorImpl>(shape, value ? std::int32_t{1} : std::int32_t{0}, device);
+                break;
+            case DType::BOOL:
+                impl_ = std::make_shared<TensorImpl>(shape, value, device);
+                break;
+        }
+    }
 
     Tensor::Tensor(std::shared_ptr<TensorImpl> impl)
         : impl_(std::move(impl))
@@ -271,37 +391,88 @@ namespace cpptensor {
 
     // ---------- Factories ----------
     Tensor Tensor::zeros(const std::vector<size_t>& shape,
-                         DeviceType device) {
-        return Tensor(shape, 0.0f, device);
+                         DeviceType device,
+                         DType dtype) {
+        return Tensor(shape, 0.0f, device, dtype);
     }
 
     Tensor Tensor::ones(const std::vector<size_t>& shape,
-                        DeviceType device) {
-        return Tensor(shape, 1.0f, device);
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, 1.0f, device, dtype);
     }
 
     Tensor Tensor::full(const std::vector<size_t>& shape,
                         float value,
-                        DeviceType device) {
-        return Tensor(shape, value, device);
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        double value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        std::int32_t value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
+    }
+
+    Tensor Tensor::full(const std::vector<size_t>& shape,
+                        bool value,
+                        DeviceType device,
+                        DType dtype) {
+        return Tensor(shape, value, device, dtype);
     }
 
     Tensor Tensor::randn(const std::vector<size_t>& shape,
-                         DeviceType device) {
+                         DeviceType device,
+                         DType dtype) {
         size_t total = 1;
         for (auto s : shape) total *= s;
-        std::vector<float> data(total);
         static thread_local std::mt19937_64 gen((unsigned)std::random_device{}());
+
+        if (dtype == DType::FLOAT64) {
+            std::normal_distribution<double> d(0.0, 1.0);
+            std::vector<double> data(total);
+            for (size_t i = 0; i < total; ++i) data[i] = d(gen);
+            return Tensor(shape, data, device);
+        }
+
         std::normal_distribution<float> d(0.0f, 1.0f);
+        std::vector<float> data(total);
         for (size_t i = 0; i < total; ++i) data[i] = d(gen);
-        return Tensor(shape, data, device);
+
+        if (dtype == DType::FLOAT32) {
+            return Tensor(shape, data, device);
+        }
+
+        if (dtype == DType::INT32) {
+            std::vector<std::int32_t> out(total);
+            for (size_t i = 0; i < total; ++i) {
+                out[i] = static_cast<std::int32_t>(std::lrint(data[i]));
+            }
+            return Tensor(shape, out, device);
+        }
+
+        std::vector<bool> out(total);
+        for (size_t i = 0; i < total; ++i) {
+            out[i] = data[i] > 0.0f;
+        }
+        return Tensor(shape, out, device);
     }
 
     Tensor Tensor::from_ptr(const std::vector<size_t>& shape,
                            float* data_ptr,
                            std::shared_ptr<TensorImpl> owner,
-                           DeviceType device) {
-        auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device);
+                           DeviceType device,
+                           DType dtype) {
+        auto impl = std::make_shared<TensorImpl>(shape, data_ptr, owner, device, dtype);
         return Tensor(std::move(impl));
     }
 
@@ -323,46 +494,27 @@ namespace cpptensor {
         return static_cast<const TensorImpl&>(*impl).device();
     }
 
+    DType Tensor::dtype() const {
+        const auto impl = require_impl(__func__);
+        return static_cast<const TensorImpl&>(*impl).dtype();
+    }
+
 
     void Tensor::print() const {
         const auto impl = require_impl(__func__);
         const auto &s = impl->shape();
+        const auto& logical = data();
+
         std::cout << "Tensor(shape=[";
         for (size_t i = 0; i < s.size(); ++i) {
             if (i) std::cout << ", ";
             std::cout << s[i];
         }
-        std::cout << "], values=[";
+        std::cout << "], dtype=" << dtype_name(impl->dtype()) << ", values=[";
 
-        // Use stride-aware access for views/sliced tensors
-        const auto &strides = impl->stride();
-        const float* data_ptr = impl->data_ptr();
-        size_t total_elements = numel();
-
-        // Helper to convert flat index to multi-dimensional indices
-        auto flat_to_indices = [&](size_t flat_idx) -> std::vector<size_t> {
-            std::vector<size_t> indices(s.size());
-            for (int i = (int)s.size() - 1; i >= 0; --i) {
-                indices[i] = flat_idx % s[i];
-                flat_idx /= s[i];
-            }
-            return indices;
-        };
-
-        // Helper to compute strided offset from multi-dimensional indices
-        auto compute_offset = [&](const std::vector<size_t>& indices) -> size_t {
-            size_t offset = 0;
-            for (size_t i = 0; i < indices.size(); ++i) {
-                offset += indices[i] * strides[i];
-            }
-            return offset;
-        };
-
-        for (size_t i = 0; i < total_elements; ++i) {
+        for (size_t i = 0; i < logical.size(); ++i) {
             if (i) std::cout << ", ";
-            auto indices = flat_to_indices(i);
-            size_t offset = compute_offset(indices);
-            std::cout << data_ptr[offset];
+            std::cout << logical[i];
             if (i >= 31) { std::cout << ", ..."; break; }
         }
         std::cout << "])\n";
@@ -372,14 +524,13 @@ namespace cpptensor {
         // small pretty printer: only for 1D or 2D tensors
         const auto impl = require_impl(__func__);
         const auto &s = impl->shape();
-        const auto &strides = impl->stride();
-        const float* data_ptr = impl->data_ptr();
+        const auto &logical = data();
 
         if (s.size() == 1) {
             std::cout << "[";
             for (size_t i = 0; i < s[0]; ++i) {
                 if (i) std::cout << ", ";
-                std::cout << data_ptr[i * strides[0]];
+                std::cout << logical[i];
             }
             std::cout << "]\n";
         } else if (s.size() == 2) {
@@ -387,8 +538,8 @@ namespace cpptensor {
                 std::cout << "[";
                 for (size_t c = 0; c < s[1]; ++c) {
                     if (c) std::cout << ", ";
-                    size_t offset = r * strides[0] + c * strides[1];
-                    std::cout << data_ptr[offset];
+                    const size_t offset = r * s[1] + c;
+                    std::cout << logical[offset];
                 }
                 std::cout << "]\n";
             }
@@ -800,16 +951,84 @@ namespace cpptensor {
 
     Tensor Tensor::contiguous() const {
         const auto impl = require_impl(__func__);
-        if (impl->can_expose_direct_data_buffer()) {
+        if (impl->dtype() == DType::FLOAT32 && impl->can_expose_direct_data_buffer()) {
             return *this;  // Already backed by a direct compact buffer
         }
-
-        return Tensor(shape(), copy_logical_data(*this), device_type());
+        return clone();
     }
 
     Tensor Tensor::clone() const {
-        require_impl(__func__);
-        return Tensor(shape(), copy_logical_data(*this), device_type());
+        const auto impl = require_impl(__func__);
+        std::vector<std::uint8_t> copied;
+        impl->materialize_logical_data_bytes(copied);
+        const auto total = numel();
+
+        switch (impl->dtype()) {
+            case DType::BOOL: {
+                std::vector<bool> out(total, false);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = copied[i] != 0;
+                }
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::INT32: {
+                std::vector<std::int32_t> out(total);
+                std::memcpy(out.data(), copied.data(), total * sizeof(std::int32_t));
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::FLOAT32: {
+                std::vector<float> out(total);
+                std::memcpy(out.data(), copied.data(), total * sizeof(float));
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::FLOAT64: {
+                std::vector<double> out(total);
+                std::memcpy(out.data(), copied.data(), total * sizeof(double));
+                return Tensor(shape(), out, device_type());
+            }
+        }
+
+        throw std::runtime_error("clone: unsupported dtype");
+    }
+
+    Tensor Tensor::astype(DType target_dtype) const {
+        const auto impl = require_impl(__func__);
+        const auto source_dtype = impl->dtype();
+
+        if (target_dtype == source_dtype) {
+            return clone();
+        }
+
+        const auto total = numel();
+        const auto& logical = data();
+
+        switch (target_dtype) {
+            case DType::BOOL: {
+                std::vector<bool> out(total, false);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = logical[i] != 0.0f;
+                }
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::INT32: {
+                std::vector<std::int32_t> out(total, 0);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = static_cast<std::int32_t>(logical[i]);
+                }
+                return Tensor(shape(), out, device_type());
+            }
+            case DType::FLOAT32:
+                return Tensor(shape(), logical, device_type());
+            case DType::FLOAT64: {
+                std::vector<double> out(total, 0.0);
+                for (size_t i = 0; i < total; ++i) {
+                    out[i] = static_cast<double>(logical[i]);
+                }
+                return Tensor(shape(), out, device_type());
+            }
+        }
+
+        throw std::runtime_error("astype: unsupported target dtype");
     }
 
     void Tensor::save(const std::string& path) const {
