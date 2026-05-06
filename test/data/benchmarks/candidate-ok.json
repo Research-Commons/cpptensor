@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "suites": [
+    {
+      "backend": "cpu",
+      "result": {
+        "benchmarks": [
+          {
+            "name": "BM_Add_CPU",
+            "run_name": "BM_Add_CPU",
+            "run_type": "iteration",
+            "real_time": 103.0,
+            "cpu_time": 103.0,
+            "time_unit": "ns"
+          },
+          {
+            "name": "BM_Mul_CPU",
+            "run_name": "BM_Mul_CPU",
+            "run_type": "iteration",
+            "real_time": 198.0,
+            "cpu_time": 198.0,
+            "time_unit": "ns"
+          }
+        ]
+      }
+    }
+  ]
+}

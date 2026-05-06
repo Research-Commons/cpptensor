@@ -1,0 +1,13 @@
+{
+  "default_max_regression_pct": 5.0,
+  "overrides": [
+    {
+      "pattern": "cpu:BM_Tensordot_*",
+      "max_regression_pct": 12.0
+    },
+    {
+      "pattern": "avx512:BM_Matmul_*",
+      "max_regression_pct": 8.0
+    }
+  ]
+}

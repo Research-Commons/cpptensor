@@ -87,3 +87,25 @@ if(CMAKE_GENERATOR)
         )
     endif()
 endif()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME benchmark_regression_check_passes
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/compare_benchmark_results.py
+            --baseline ${CMAKE_SOURCE_DIR}/test/data/benchmarks/baseline.json
+            --candidate ${CMAKE_SOURCE_DIR}/test/data/benchmarks/candidate-ok.json
+            --max-regression-pct 5
+    )
+
+    add_test(
+        NAME benchmark_regression_check_detects_slowdown
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/benchmarks/compare_benchmark_results.py
+            --baseline ${CMAKE_SOURCE_DIR}/test/data/benchmarks/baseline.json
+            --candidate ${CMAKE_SOURCE_DIR}/test/data/benchmarks/candidate-regression.json
+            --max-regression-pct 5
+    )
+    set_tests_properties(benchmark_regression_check_detects_slowdown PROPERTIES WILL_FAIL TRUE)
+endif()
