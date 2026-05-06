@@ -28,6 +28,17 @@ cmake -S . -B build-dev \
   -DCPPTENSOR_BUILD_BENCHMARKS=ON
 ```
 
+## CMake build profiles
+- `Debug`: target-scoped `-O0 -g3` (or MSVC `/Od /Zi /RTC1`).
+- `Release`: target-scoped `-O3 -DNDEBUG` (or MSVC `/O2 /DNDEBUG`).
+- `RelWithDebInfo`: target-scoped `-O2 -g -DNDEBUG` (or MSVC `/O2 /Zi /DNDEBUG`).
+- Single-config generators default to `RelWithDebInfo` when `CMAKE_BUILD_TYPE` is omitted.
+
+Optional toggles:
+- `-DCPPTENSOR_ENABLE_PROFILING=ON`: preserve frame pointers for profiling.
+- `-DCPPTENSOR_ENABLE_LTO=ON`: enable IPO/LTO for `Release` and `RelWithDebInfo` when supported.
+- `-DCPPTENSOR_ENABLE_GPERFTOOLS=ON`: link examples with `libprofiler` when available.
+
 ## install + downstream CMake usage
 Install cpptensor to a prefix:
 

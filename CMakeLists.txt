@@ -13,6 +13,9 @@ option(CPPTENSOR_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer instrumentation
 option(CPPTENSOR_ENABLE_TSAN "Enable ThreadSanitizer instrumentation" OFF)
 option(CPPTENSOR_ENABLE_STRICT_WARNINGS "Enable stricter compiler warning profile for cpptensor targets" OFF)
 option(CPPTENSOR_WARNINGS_AS_ERRORS "Treat enabled warnings as errors for cpptensor targets" OFF)
+option(CPPTENSOR_ENABLE_PROFILING "Enable profiling-friendly frame-pointer settings" OFF)
+option(CPPTENSOR_ENABLE_LTO "Enable interprocedural optimization (LTO) for Release/RelWithDebInfo builds" OFF)
+option(CPPTENSOR_ENABLE_GPERFTOOLS "Link example binaries with libprofiler when available" OFF)
 
 project(cpptensor VERSION 0.1.0 LANGUAGES CXX)
 
@@ -25,7 +28,25 @@ set(CPPTENSOR_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/cpptensor" CACHE P
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-message(STATUS "Building cpptensor with build type: ${CMAKE_BUILD_TYPE}")
+
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    if(NOT CMAKE_BUILD_TYPE)
+        set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+    endif()
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+    message(STATUS "Configuring cpptensor for build type: ${CMAKE_BUILD_TYPE}")
+else()
+    message(STATUS "Configuring cpptensor for multi-config generator: ${CMAKE_CONFIGURATION_TYPES}")
+endif()
+
+set(CPPTENSOR_LTO_SUPPORTED FALSE)
+if(CPPTENSOR_ENABLE_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT CPPTENSOR_LTO_SUPPORTED OUTPUT CPPTENSOR_LTO_ERROR LANGUAGES CXX)
+    if(NOT CPPTENSOR_LTO_SUPPORTED)
+        message(FATAL_ERROR "CPPTENSOR_ENABLE_LTO=ON requested, but IPO/LTO is not supported: ${CPPTENSOR_LTO_ERROR}")
+    endif()
+endif()
 
 if(BUILD_CUDA)
     if(APPLE)
@@ -106,6 +127,35 @@ if(CPPTENSOR_WARNINGS_AS_ERRORS)
         set(CPPTENSOR_WARNING_ERROR_OPTION -Werror)
     endif()
 endif()
+
+function(cpptensor_apply_build_profile target_name)
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Debug>:/Od /Zi /RTC1>
+            $<$<CONFIG:Release>:/O2 /DNDEBUG>
+            $<$<CONFIG:RelWithDebInfo>:/O2 /Zi /DNDEBUG>
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Debug>:-O0 -g3>
+            $<$<CONFIG:Release>:-O3 -DNDEBUG>
+            $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>
+        )
+    endif()
+
+    if(CPPTENSOR_ENABLE_PROFILING)
+        if(MSVC)
+            target_compile_options(${target_name} PRIVATE /Oy-)
+        elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+            target_compile_options(${target_name} PRIVATE -fno-omit-frame-pointer)
+        endif()
+    endif()
+
+    if(CPPTENSOR_ENABLE_LTO AND CPPTENSOR_LTO_SUPPORTED)
+        set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+        set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    endif()
+endfunction()
 
 function(cpptensor_apply_build_safety_flags target_name)
     if(NOT TARGET ${target_name})
@@ -239,9 +289,7 @@ message(STATUS "AVX-512 kernels: requested=${BUILD_AVX512}, enabled=${CPPTENSOR_
 if(NOT CPPTENSOR_AVX512_SUPPORTED)
     message(STATUS "AVX-512 unavailable: ${CPPTENSOR_AVX512_UNSUPPORTED_REASON}")
 endif()
-
-# Enable debug info and frame pointers (needed for accurate profiling)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g -fno-omit-frame-pointer")
+message(STATUS "Build profile options: profiling=${CPPTENSOR_ENABLE_PROFILING}, lto=${CPPTENSOR_ENABLE_LTO}, gperftools_examples=${CPPTENSOR_ENABLE_GPERFTOOLS}")
 
 if(BUILD_CUDA)
     find_package(CUDAToolkit REQUIRED)
@@ -263,7 +311,15 @@ if(CPPTENSOR_BUILD_BENCHMARKS)
     message(STATUS "Adding Google Benchmark from third_party/googlebenchmark")
     set(BENCHMARK_ENABLE_TESTING OFF) # disable GB's own tests
     set(BENCHMARK_ENABLE_INSTALL OFF)
+    set(BENCHMARK_ENABLE_WERROR OFF)
     add_subdirectory(third_party/googlebenchmark)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        foreach(_benchmark_target benchmark benchmark_main)
+            if(TARGET ${_benchmark_target})
+                target_compile_options(${_benchmark_target} PRIVATE -Wno-c2y-extensions)
+            endif()
+        endforeach()
+    endif()
 else()
     message(STATUS "cpptensor benchmarks: DISABLED")
 endif()
@@ -311,15 +367,17 @@ file(GLOB AVX512_SRC CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/backend/isa/*avx5
 # ==== Create object libraries for ISA specializations ====
 if(CPPTENSOR_ENABLE_AVX2 AND AVX2_SRC)
     add_library(cpptensor_isa_avx2 OBJECT ${AVX2_SRC})
-    target_compile_options(cpptensor_isa_avx2 PRIVATE ${CPPTENSOR_AVX2_COMPILE_FLAGS} -O3)
+    target_compile_options(cpptensor_isa_avx2 PRIVATE ${CPPTENSOR_AVX2_COMPILE_FLAGS})
     target_include_directories(cpptensor_isa_avx2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    cpptensor_apply_build_profile(cpptensor_isa_avx2)
     cpptensor_apply_build_safety_flags(cpptensor_isa_avx2)
 endif()
 
 if(CPPTENSOR_ENABLE_AVX512 AND AVX512_SRC)
     add_library(cpptensor_isa_avx512 OBJECT ${AVX512_SRC})
-    target_compile_options(cpptensor_isa_avx512 PRIVATE ${CPPTENSOR_AVX512_COMPILE_FLAGS} -O3)
+    target_compile_options(cpptensor_isa_avx512 PRIVATE ${CPPTENSOR_AVX512_COMPILE_FLAGS})
     target_include_directories(cpptensor_isa_avx512 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    cpptensor_apply_build_profile(cpptensor_isa_avx512)
     cpptensor_apply_build_safety_flags(cpptensor_isa_avx512)
 endif()
 
@@ -363,6 +421,7 @@ target_compile_definitions(cpptensor PUBLIC
 set_target_properties(cpptensor PROPERTIES
         POSITION_INDEPENDENT_CODE ON
 )
+cpptensor_apply_build_profile(cpptensor)
 
 # ==== Include Directories ====
 target_include_directories(cpptensor
