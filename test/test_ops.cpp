@@ -290,6 +290,22 @@ float expected_pow_domain_semantics(float base, float exponent) {
     return std::pow(base, exponent);
 }
 
+float naive_sum_f32(const std::vector<float>& values) {
+    float total = 0.0f;
+    for (float value : values) {
+        total += value;
+    }
+    return total;
+}
+
+float naive_dot_f32(const std::vector<float>& lhs, const std::vector<float>& rhs) {
+    float total = 0.0f;
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        total += lhs[i] * rhs[i];
+    }
+    return total;
+}
+
 void require_broadcast_arithmetic_results() {
     cpptensor::Tensor matrix({2, 3}, {1, 2, 3, 4, 5, 6});
     cpptensor::Tensor row({1, 3}, {10, 20, 30});
@@ -847,6 +863,43 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.max(0), {4, 5, 6});
     require_shape(t.min(-1), {2});
     require_data(t.min(-1), {1, 4});
+}
+
+TEST_CASE("sum mean and dot use numerically safer accumulation on adversarial inputs",
+          "[reduction][dot][stability]") {
+    cpptensor::initialize_kernels();
+
+    constexpr size_t repeats = 4096;
+    std::vector<float> values;
+    values.reserve(repeats * 3);
+    for (size_t i = 0; i < repeats; ++i) {
+        values.push_back(100000000.0f);
+        values.push_back(1.0f);
+        values.push_back(-100000000.0f);
+    }
+
+    const float expected_sum = static_cast<float>(repeats);
+    const float expected_mean = expected_sum / static_cast<float>(values.size());
+
+    cpptensor::Tensor tensor({values.size()}, values);
+
+    const float naive_sum = naive_sum_f32(values);
+    REQUIRE(std::fabs(naive_sum - expected_sum) > 1000.0f);
+
+    run_cpu_dispatch_paths([&]() {
+        require_data(tensor.sum(), {expected_sum});
+        require_data(tensor.mean(), {expected_mean});
+    });
+
+    std::vector<float> ones(values.size(), 1.0f);
+    cpptensor::Tensor ones_tensor({ones.size()}, ones);
+
+    const float naive_dot = naive_dot_f32(values, ones);
+    REQUIRE(std::fabs(naive_dot - expected_sum) > 1000.0f);
+
+    run_cpu_dispatch_paths([&]() {
+        require_data(cpptensor::dot(tensor, ones_tensor), {expected_sum});
+    });
 }
 
 TEST_CASE("non-contiguous view regressions match contiguous baselines",

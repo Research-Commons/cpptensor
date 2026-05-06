@@ -1,11 +1,8 @@
 #include "cpptensor/ops/linearAlgebra/dot.hpp"
 #include "cpptensor/dispatcher/kernelRegistry.h"
 #include "cpptensor/enums/dispatcherEnum.h"
+#include "cpptensor/ops/helperOps.hpp"
 #include <stdexcept>
-
-#ifdef USE_OPENBLAS
-#include <cblas.h>
-#endif
 
 namespace cpptensor {
 
@@ -23,39 +20,11 @@ namespace cpptensor {
             throw std::runtime_error("dot: size mismatch");
         }
 
-        const size_t n = Ash[0];
-
         Tensor Out = Tensor::full({}, 0.0f, A.device_type());
 
-    #ifdef USE_OPENBLAS
-            Tensor A_blas = A.is_contiguous() ? A : A.contiguous();
-            Tensor B_blas = B.is_contiguous() ? B : B.contiguous();
-
-            // ===== Use OpenBLAS SDOT =====
-            //
-            // SDOT computes the dot product of two vectors:
-            // result = sum(A[i] * B[i]) for i = 0..n-1
-            //
-            // Parameters:
-            // - n: number of elements
-            // - x: pointer to first vector
-            // - incx: stride within x (1 for contiguous)
-            // - y: pointer to second vector
-            // - incy: stride within y (1 for contiguous)
-
-            const float* Adata = A_blas.impl()->data_ptr();
-            const float* Bdata = B_blas.impl()->data_ptr();
-
-            float result = cblas_sdot(
-                static_cast<int>(n),  // number of elements
-                Adata, 1,             // vector A, stride 1
-                Bdata, 1              // vector B, stride 1
-            );
-
-            Out.data().data()[0] = result;
-    #else
-            KernelRegistry::instance().getKernel(OpType::Dot, A.device_type())(A, B, Out);
-    #endif
+            const Tensor prepared_a = materialize_for_backend_input(A);
+            const Tensor prepared_b = materialize_for_backend_input(B);
+            KernelRegistry::instance().getKernel(OpType::Dot, A.device_type())(prepared_a, prepared_b, Out);
             return Out;
     }
 

@@ -290,26 +290,50 @@ namespace cpptensor{
         const float* b = B.data().data();
         const std::int64_t n = static_cast<std::int64_t>(A.shape()[0]);
 
-        __m512 vacc = _mm512_setzero_ps();
+        __m512d vacc_lo = _mm512_setzero_pd();
+        __m512d vacc_hi = _mm512_setzero_pd();
         std::int64_t i = 0;
         constexpr int stride = 16;
         for (; i + stride <= n; i += stride) {
             __m512 va = _mm512_loadu_ps(a + i);
             __m512 vb = _mm512_loadu_ps(b + i);
-            vacc = _mm512_fmadd_ps(va, vb, vacc); // FMA accumulate
+            __m512 prod = _mm512_mul_ps(va, vb);
+            __m256 prod_lo = _mm512_castps512_ps256(prod);
+            __m256 prod_hi = _mm512_extractf32x8_ps(prod, 1);
+            vacc_lo = _mm512_add_pd(vacc_lo, _mm512_cvtps_pd(prod_lo));
+            vacc_hi = _mm512_add_pd(vacc_hi, _mm512_cvtps_pd(prod_hi));
         }
 
-        // Reduce 512 -> two 256 then scalar
-        __m256 lo = _mm512_castps512_ps256(vacc);
-        __m256 hi = _mm512_extractf32x8_ps(vacc, 1);
-        float sum = hsum256(lo) + hsum256(hi);
+        alignas(64) double lane_lo[8];
+        alignas(64) double lane_hi[8];
+        _mm512_store_pd(lane_lo, vacc_lo);
+        _mm512_store_pd(lane_hi, vacc_hi);
+
+        double sum = 0.0;
+        double compensation = 0.0;
+        for (double value : lane_lo) {
+            const double adjusted = value - compensation;
+            const double next = sum + adjusted;
+            compensation = (next - sum) - adjusted;
+            sum = next;
+        }
+        for (double value : lane_hi) {
+            const double adjusted = value - compensation;
+            const double next = sum + adjusted;
+            compensation = (next - sum) - adjusted;
+            sum = next;
+        }
 
         // Remainder
         for (; i < n; ++i) {
-            sum += a[i] * b[i];
+            const double adjusted =
+                (static_cast<double>(a[i]) * static_cast<double>(b[i])) - compensation;
+            const double next = sum + adjusted;
+            compensation = (next - sum) - adjusted;
+            sum = next;
         }
 
-        Out.data()[0] = sum;
+        Out.data()[0] = static_cast<float>(sum);
     }
 
     // ============================================================================
