@@ -46,6 +46,16 @@ if(CMAKE_GENERATOR)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_configure_guard.cmake
     )
 
+    add_test(
+        NAME cmake_package_consumer_smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DPRODUCER_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DCONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/package_consumer
+            -DGENERATOR=${CMAKE_GENERATOR}
+            -DBUILD_CONFIG=$<CONFIG>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake_package_consumer_smoke.cmake
+    )
+
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         add_test(
             NAME cmake_configure_enables_asan_ubsan_flags

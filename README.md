@@ -28,6 +28,22 @@ cmake -S . -B build-dev \
   -DCPPTENSOR_BUILD_BENCHMARKS=ON
 ```
 
+## install + downstream CMake usage
+Install cpptensor to a prefix:
+
+```bash
+cmake -S . -B build
+cmake --build build
+cmake --install build --prefix /tmp/cpptensor-install
+```
+
+Consume from another CMake project:
+
+```cmake
+find_package(cpptensor CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE cpptensor::cpptensor)
+```
+
 ## Build safety modes (warnings + sanitizers)
 
 cpptensor now provides opt-in CMake toggles for stricter development/CI builds:
