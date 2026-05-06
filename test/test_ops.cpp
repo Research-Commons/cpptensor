@@ -837,6 +837,60 @@ TEST_CASE("reductions handle global and dimension-specific forms", "[reduction]"
     require_data(t.min(-1), {1, 4});
 }
 
+TEST_CASE("non-contiguous view regressions match contiguous baselines",
+          "[ops][views][regression]") {
+    cpptensor::Tensor matrix({3, 4}, {
+        1, 2, 3, 4,
+        5, 6, 7, 8,
+        9, 10, 11, 12
+    });
+
+    SECTION("slice sum matches contiguous baseline") {
+        auto sliced = matrix.slice(1, 0, 4, 2);
+        REQUIRE_FALSE(sliced.is_contiguous());
+
+        auto baseline = sliced.contiguous();
+        auto sliced_sum = sliced.sum(0);
+        auto baseline_sum = baseline.sum(0);
+
+        require_shape(sliced_sum, baseline_sum.shape());
+        require_data(sliced_sum, baseline_sum.data());
+    }
+
+    SECTION("transpose clone preserves logical order") {
+        auto transposed = matrix.transpose();
+        auto cloned = transposed.clone();
+        auto baseline = transposed.contiguous();
+
+        require_shape(cloned, baseline.shape());
+        require_data(cloned, baseline.data());
+    }
+
+    SECTION("chained views stay layout-correct across unary and reductions") {
+        auto chained = matrix.transpose().slice(0, 1, 4).slice(1, 0, 3, 2);
+        REQUIRE_FALSE(chained.is_contiguous());
+
+        auto baseline = chained.contiguous();
+        require_data(cpptensor::exp(chained), cpptensor::exp(baseline).data());
+        require_data(chained.sum(1), baseline.sum(1).data());
+    }
+
+    SECTION("from_ptr-backed views match contiguous baselines") {
+        cpptensor::Tensor owner({8}, {0, 1, 2, 3, 4, 5, 6, 7});
+        auto from_ptr_view = cpptensor::Tensor::from_ptr(
+            {6},
+            owner.data().data() + 1,
+            owner.impl(),
+            owner.device_type());
+        auto stepped = from_ptr_view.slice(0, 0, 6, 2);
+        REQUIRE_FALSE(stepped.is_contiguous());
+
+        auto baseline = stepped.contiguous();
+        require_data(-stepped, (-baseline).data());
+        require_data(stepped.sum(0), baseline.sum(0).data());
+    }
+}
+
 TEST_CASE("contiguous materializes view values from the logical view start", "[tensor][contiguous]") {
     cpptensor::Tensor base({4}, {0, 1, 2, 3});
 

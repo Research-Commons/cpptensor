@@ -32,6 +32,10 @@ void cpptensor::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     // Elementwise loop over output tensor
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
@@ -43,7 +47,7 @@ void cpptensor::CPU::addKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = A.data()[idxA] + B.data()[idxB];
+        out_data[pos] = a_data[idxA] + b_data[idxB];
     }
 }
 
@@ -70,6 +74,10 @@ void cpptensor::CPU::mulKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -79,7 +87,7 @@ void cpptensor::CPU::mulKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = A.data()[idxA] * B.data()[idxB];
+        out_data[pos] = a_data[idxA] * b_data[idxB];
     }
 }
 
@@ -109,6 +117,10 @@ void cpptensor::CPU::subKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     // Elementwise loop over output tensor
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
@@ -120,7 +132,7 @@ void cpptensor::CPU::subKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = A.data()[idxA] - B.data()[idxB];
+        out_data[pos] = a_data[idxA] - b_data[idxB];
     }
 }
 
@@ -149,6 +161,10 @@ void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     // Elementwise loop over output tensor
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
@@ -160,7 +176,7 @@ void cpptensor::CPU::divKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = A.data()[idxA] / B.data()[idxB];
+        out_data[pos] = a_data[idxA] / b_data[idxB];
     }
 }
 
@@ -811,6 +827,10 @@ void cpptensor::CPU::eqKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     // Element-wise comparison
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
@@ -821,7 +841,7 @@ void cpptensor::CPU::eqKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] == B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] == b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
 
@@ -851,6 +871,10 @@ void cpptensor::CPU::neKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -860,7 +884,7 @@ void cpptensor::CPU::neKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] != B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] != b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
 
@@ -890,6 +914,10 @@ void cpptensor::CPU::gtKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -899,7 +927,7 @@ void cpptensor::CPU::gtKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] > B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] > b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
 
@@ -929,6 +957,10 @@ void cpptensor::CPU::ltKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -938,7 +970,7 @@ void cpptensor::CPU::ltKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] < B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] < b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
 
@@ -968,6 +1000,10 @@ void cpptensor::CPU::geKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -977,7 +1013,7 @@ void cpptensor::CPU::geKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] >= B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] >= b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
 
@@ -1007,6 +1043,10 @@ void cpptensor::CPU::leKernel(const Tensor &A, const Tensor &B, Tensor &out) {
         strideOut[i] = strideOut[i+1] * out_sh[i+1];
     }
 
+    const auto& a_data = A.data();
+    const auto& b_data = B.data();
+    auto& out_data = out.data();
+
     size_t total = 1;
     for (size_t dim : out_sh) total *= dim;
     for (size_t pos = 0; pos < total; ++pos) {
@@ -1016,6 +1056,6 @@ void cpptensor::CPU::leKernel(const Tensor &A, const Tensor &B, Tensor &out) {
             if (a_pad[dim] != 1) idxA += i * strideA[dim];
             if (b_pad[dim] != 1) idxB += i * strideB[dim];
         }
-        out.data()[pos] = (A.data()[idxA] <= B.data()[idxB]) ? 1.0f : 0.0f;
+        out_data[pos] = (a_data[idxA] <= b_data[idxB]) ? 1.0f : 0.0f;
     }
 }
