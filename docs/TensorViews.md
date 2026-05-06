@@ -1,6 +1,6 @@
 # Tensor Views in cpptensor
 
-**Last verified:** 2026-05-06  
+**Last verified:** 2026-05-06
 **Verified against:** `include/cpptensor/tensor/tensor.hpp`, `src/tensor/tensor.cpp`, `src/tensor/tensorimpl.cpp`, `test/test_tensor_views.cpp`, `test/test_ops.cpp`, `test/test_tensor_serialization.cpp`
 
 This page documents **current shipped view semantics**.

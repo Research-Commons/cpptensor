@@ -1,6 +1,6 @@
 # cpptensor Operations Status (Source of Truth)
 
-**Last verified:** 2026-05-06  
+**Last verified:** 2026-05-06
 **Verification inputs:**
 - Public API headers under `include/cpptensor/`
 - Kernel registration in `src/backend/backend_loader.cpp`

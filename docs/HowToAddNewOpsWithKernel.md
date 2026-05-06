@@ -1,6 +1,6 @@
 # How to Add a New Operation to `cpptensor`
 
-**Last verified:** 2026-05-06  
+**Last verified:** 2026-05-06
 **Verified against:** `include/cpptensor/enums/dispatcherEnum.h`, `src/backend/backend_loader.cpp`, `src/backend/cpu_backend.cpp`, `src/ops/*`, `test/test_ops.cpp`
 
 This guide reflects the **current repository layout**.
