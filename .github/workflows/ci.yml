@@ -220,9 +220,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${BUILD_DIR}"
-          CC=/usr/bin/gcc-13 CXX=/usr/bin/g++-13 conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
+          conda run -n cpptensor cmake -S . -B "${BUILD_DIR}" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=/usr/bin/g++-13 \
             -DBUILD_CUDA=ON \
             -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-13 \
             -DCMAKE_CUDA_FLAGS=--allow-unsupported-compiler \
