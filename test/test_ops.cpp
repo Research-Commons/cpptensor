@@ -784,6 +784,15 @@ TEST_CASE("linear algebra kernels honor logical tensor views", "[linear-algebra]
         require_data(result, {1, 3, 2, 4, 5, 7, 6, 8});
     }
 
+    SECTION("batched matmul reuses broadcasted batch views") {
+        cpptensor::Tensor lhs({1, 2, 2}, {1, 0, 0, 1});
+        cpptensor::Tensor rhs({2, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8});
+
+        auto result = cpptensor::matmul(lhs, rhs);
+        require_shape(result, {2, 2, 2});
+        require_data(result, {1, 2, 3, 4, 5, 6, 7, 8});
+    }
+
     SECTION("tensordot uses the logical contents of sliced tensors") {
         cpptensor::Tensor lhs_base({2, 2, 2}, {1, 2, 3, 4, 5, 6, 7, 8});
         cpptensor::Tensor rhs({2}, {1, 0});

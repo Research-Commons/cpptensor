@@ -200,8 +200,13 @@ throughput on cancellation-heavy inputs:
 Comparison operators produce `bool` tensors, and dtype is preserved across views,
 clone/contiguous, and factory creation (`zeros`, `ones`, `full`, `randn`).
 
-## Checkpoint I/O
+## Broadcasting APIs
+The tensor API exposes explicit broadcasting helpers:
+- `expand(shape)` / `broadcast_to(shape)` create zero-copy broadcast views
+  (size-1 dimensions become stride-0).
+- `repeat(repeats)` materializes tiled data (copy semantics).
 
+## Checkpoint I/O
 Tensor checkpoints are supported via `Tensor::save(path)` and `Tensor::load(path)`.
 See `docs/TensorSerialization.md` for the versioned binary format and view behavior.
 

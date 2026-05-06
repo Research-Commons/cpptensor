@@ -37,3 +37,19 @@ TEST_CASE("squeeze_padded_to_unpadded rejects oversized scalar reductions", "[br
         cpptensor::squeeze_padded_to_unpadded({1.0f, 99.0f}, padded_shape, unpadded_shape),
         Catch::Matchers::ContainsSubstring("padded buffer size"));
 }
+
+TEST_CASE("compute_broadcast_view_strides returns stride-0 for expanded dimensions", "[broadcast][utils]") {
+    const std::vector<size_t> source_shape{1, 3};
+    const std::vector<size_t> source_stride{3, 1};
+
+    REQUIRE(cpptensor::compute_broadcast_view_strides(source_shape, source_stride, {4, 3}) ==
+            std::vector<size_t>{0, 1});
+    REQUIRE(cpptensor::compute_broadcast_view_strides(source_shape, source_stride, {2, 1, 3}) ==
+            std::vector<size_t>{0, 3, 1});
+}
+
+TEST_CASE("compute_broadcast_view_strides rejects incompatible shapes", "[broadcast][utils]") {
+    REQUIRE_THROWS_WITH(
+        cpptensor::compute_broadcast_view_strides({2, 3}, {3, 1}, {4, 3}),
+        Catch::Matchers::ContainsSubstring("not broadcastable"));
+}
